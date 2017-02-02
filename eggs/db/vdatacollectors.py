@@ -119,23 +119,29 @@ class Cursor:
     dataRows = pool.map( partial(self.parseLine, columns=columns) , [ line for line in rows.split('\2') ] )
     pool.close()
     pool.join()
-    self.data.extend(dataRows)
-    return dataRows
+    return [x for x in dataRows if x is not None] # ignore broken line 
 
   def parseRows(self, rows, columns):
     dataRows = []
     for line in rows.split('\2'):
       try :
-        dataRows.append( [ parseValue(self.table.columnTypes[columns[i]], cv) for i, cv in enumerate(line.split('\1')) ] )
+        # ignore broken line
+        colValues = line.split('\1')
+        if len(colValues) == len(columns) :
+          dataRows.append( [ parseValue(self.table.columnTypes[columns[i]], cv) for i, cv in enumerate(colValues) ] )
       except Exception, e:
-        raise StandardError("[%s] when parseValue [%s] of column [%s] on table [%s]" % (str(e), cv, self.table.columns[i], self.table.tablename))
+        raise StandardError("[%s] when parseRows [%s] of column [%s] on table [%s]" % (str(e), cv, self.table.columns[i], self.table.tablename))
     return dataRows
 
   def parseLine(self, line, columns):
     try :
-      return [ parseValue(self.table.columnTypes[columns[i]], cv) for i, cv in enumerate(line.split('\1')) ]
+      colValues = line.split('\1')
+      if len(colValues) == len(columns) :
+        return [ parseValue(self.table.columnTypes[columns[i]], cv) for i, cv in enumerate(colValues) ]
+      else :
+        return None
     except Exception, e:
-      raise StandardError("[%s] when parseValue [%s] of column [%s] on table [%s]" % (str(e), cv, self.table.columns[i], self.table.tablename))
+      raise StandardError("[%s] when parseLine [%s] of column [%s] on table [%s]" % (str(e), cv, self.table.columns[i], self.table.tablename))
 
   def Eof(self):
     return self.pos>=len(self.data)
@@ -160,33 +166,37 @@ def parseValue(sqltype, value):
   # Till now, Vertica datacollector tables only use types: BOOLEAN, FLOAT, INTEGER, TIMESTAMP WITH TIME ZONE, VARCHAR
   if len(value) == 0:
     return None
-
-  if sqltype in ('INTEGER', 'INT', 'BIGINT', 'SMALLINT', 'MEDIUMINT', 'TINYINT', 'INT2', 'INT8') :
-    # convert unsigned long to negative long. Note: INTEGER is numeric(18,0) in Vertica, eg. '18442240474082184385' means -4503599627367231
-    lValue = long(value)
-    if lValue <= 0x7fffffffffffffff :
-      return lValue
+  
+  try :
+    if sqltype in ('INTEGER', 'INT', 'BIGINT', 'SMALLINT', 'MEDIUMINT', 'TINYINT', 'INT2', 'INT8') :
+      # convert unsigned long to negative long. Note: INTEGER is numeric(18,0) in Vertica, eg. '18442240474082184385' means -4503599627367231
+      lValue = long(value)
+      if lValue <= 0x7fffffffffffffff :
+        return lValue
+      else :
+        return struct.unpack('l', struct.pack('L', lValue))[0] 
+    elif sqltype in ('DOUBLE', 'FLOAT', 'REAL') :
+      return float(value)
+    elif sqltype in ('DATE', 'DATETIME', 'TIMESTAMP') :
+      lValue = long(value)
+      # -9223372036854775808(-0x8000000000000000) means null in Vertica
+      if lValue == -0x8000000000000000 :
+          return None
+      # 946684800 is secondes between '1970-01-01 00:00:00'(Python) and '2000-01-01 00:00:00'(Vertica)
+      return datetime.fromtimestamp(float(lValue)/1000000+946684800).strftime("%Y-%m-%d %H:%M:%S.%f")
+    elif sqltype == 'BOOLEAN' :
+        return 'true' == value.lower()
+    elif sqltype in ('DECIMAL', 'NUMERIC', 'BOOLEAN') :
+      return Decimal(value)
+    elif sqltype == 'BLOB' :
+      return buffer(value)
     else :
-      return struct.unpack('l', struct.pack('L', lValue))[0] 
-  elif sqltype in ('DOUBLE', 'FLOAT', 'REAL') :
-    return float(value)
-  elif sqltype in ('DATE', 'DATETIME', 'TIMESTAMP') :
-    lValue = long(value)
-    # -9223372036854775808(-0x8000000000000000) means null in Vertica
-    if lValue == -0x8000000000000000 :
-        return None
-    # 946684800 is secondes between '1970-01-01 00:00:00'(Python) and '2000-01-01 00:00:00'(Vertica)
-    return datetime.fromtimestamp(float(lValue)/1000000+946684800).strftime("%Y-%m-%d %H:%M:%S.%f")
-  elif sqltype == 'BOOLEAN' :
-      return 'true' == value.lower()
-  elif sqltype in ('DECIMAL', 'NUMERIC', 'BOOLEAN') :
-    return Decimal(value)
-  elif sqltype == 'BLOB' :
-    return buffer(value)
-  else :
-    # others are str. 
-    # process escpe character in string, eg. '\n'
-    return value.decode('string_escape')
+      # others are str. 
+      # process escpe character in string, eg. '\n'
+      return value.decode('string_escape')
+  except :
+    # ignore incorrect value format
+    return None
 
 
 def getDDLs(channel, catalogpath):

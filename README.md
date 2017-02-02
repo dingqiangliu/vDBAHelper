@@ -10,11 +10,13 @@ Features
 =============
 vDBAHelper is a toolkit for Vertica DBA, built on dynamic language **[Python](https://www.python.org/)**  and other open source projects, such as SQLite wrap **[APSW](https://rogerbinns.github.io/apsw/)** for query engine, lightweight distributed process framework **[execnet](http://codespeak.net/execnet/)** for remote access.
 
+vDBAHelper has no dependence on Vertica database and clients, it send dynamic code on each Vertica node to parse log files.
+
 APSW/SQLite extensions:
 ----------
  1. SQL standard support by APSW/SQLite, with query shell and Python API.
  2. virtual tables(external table) for Vertica datacollector files on all Vertica cluster nodes. 
-     - TODO: support remote filter on "time" and/or "nodename" columns for better performance
+     - TODO: support remote filter on "time" and/or "node_name" columns for better performance
 	 - TODO: sync datacollector data to SQLite database for better performance, and query offline.
  3. TODO: virtual table for [vertica.log] on all Vertica cluster nodes.
  4. TODO: virtual table for [dbLog] on all Vertica cluster nodes.
@@ -148,6 +150,6 @@ Another approach is rebuilt APSW in your system, install it or copy your new .so
 About "time" column format in datacollectors
 ----------
 Type of "time" column in Vertica datacollector tables is TIMESTAMP WITH TIME ZONE. 
-SQLite support it butdo not have native **TIME ZONE** type storage, it alway use UTC. But "time" value of datacollector tables in SQLite show the same number as Vertia's.
+SQLite support it but do not have native **TIME ZONE** type storage, it alway use UTC. But "time" value of datacollector tables in SQLite show the same number as Vertia's.
 So you need NOT use "datetime(time, 'localtime')" function get correct format at your time zone.
 

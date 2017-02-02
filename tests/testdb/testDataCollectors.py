@@ -1,7 +1,7 @@
 #!/usr/bin/python
 #
 # Copyright (c) 2006 - 2017, Hewlett-Packard Development Co., L.P. 
-# Description: SQLite virtual tables for Vertica data collectors
+# Description: testing cases for SQLite virtual tables of Vertica data collectors
 # Author: DingQiang Liu
 
 import unittest
@@ -35,8 +35,11 @@ class TestDataCollectors(unittest.TestCase):
     try :
       cursor = self.connection.cursor()
       if cursor.execute("select count(1) from dc_storage_layer_statistics_by_day limit 1").next()[0] > 0 :
-        #time format: yyyy-mm-dd hh:mm:dd
+        #TODO: check TIMESTAMP type, format: %Y-%m-%d %H:%M:%S.%f
         self.assertTrue( len(cursor.execute("select time from dc_storage_layer_statistics_by_day limit 1").next()[0].split('-')) == 3)
+        #TODO: check VARCHAR type
+        #TODO: check INTEGER type
+        #TODO: check FLOAT type
     except :
       self.fail(traceback.format_exc().decode(sys.stdout.encoding))
     finally :
@@ -51,6 +54,7 @@ class TestDataCollectors(unittest.TestCase):
       cursor = self.connection.cursor()
       cursor.execute("select * from dc_requests_completed limit 1")
       self.assertTrue(cursor.execute("select count(1) from dc_requests_completed").next()[0]>=0)
+      #TODO: check BOOLEAN type
     except :
       self.fail(traceback.format_exc().decode(sys.stdout.encoding))
     finally :
@@ -63,17 +67,20 @@ class TestDataCollectors(unittest.TestCase):
     cursor = None 
     try :
       cursor = self.connection.cursor()
-
       print ""
+
       tables = [ t[0] for t in cursor.execute("select tbl_name from sqlite_master where lower(tbl_name) like 'dc__%' and not lower(tbl_name) in ('dc_storage_layer_statistics_by_day', 'dc_requests_completed', 'dc_lock_attempts')") ]
+      for tablename in tables :
+        for r in cursor.execute("select * from %s limit 1" % tablename): pass
+        print "    testing on table [%s] passed." % tablename
+
       ## TODO: performance tuning
       #tables = [ 'dc_network_info' ]
-      for tablename in tables :
-        #cursor.execute("select * from %s limit 1" % tablename)
-        for r in cursor.execute("select * from %s" % tablename): pass
-        print "    testing on table [%s] passed." % tablename
+      #for r in cursor.execute("select * from %s" % tablename): pass
+      #  print "    testing on table [%s] passed." % tablename
     except :
       self.fail("[%s] when query on table [%s]" % (traceback.format_exc(), tablename))
+
       # fix for: UnicodeDecodeError: 'ascii' codec can't decode byte 0xe6 in position 0: ordinal not in range(128)
       #self.fail("[%s] when query on table [%s]" % (traceback.format_exc().decode(sys.stdout.encoding), tablename)) 
     finally :

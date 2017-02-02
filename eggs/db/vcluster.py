@@ -1,7 +1,7 @@
 #!/usr/bin/python
 #
 # Copyright (c) 2006 - 2017, Hewlett-Packard Development Co., L.P. 
-# Description: SQLite virtual tables for Vertica data collectors
+# Description: Vertica cluster communication and configuration
 # Author: DingQiang Liu
 
 import os, atexit
