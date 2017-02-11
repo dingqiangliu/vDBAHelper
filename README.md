@@ -16,11 +16,56 @@ APSW/SQLite extensions:
 ----------
  1. SQL standard support by APSW/SQLite, with query shell and Python API.
  2. virtual tables(external table) for Vertica datacollector files on all Vertica cluster nodes. 
-     - TODO: support remote filter on "time" and/or "node_name" columns for better performance
+     - push filter on "time" and/or "node_name" columns to scan for better performance
 	 - TODO: sync datacollector data to SQLite database for better performance, and query offline.
  3. TODO: virtual table for [vertica.log] on all Vertica cluster nodes.
  4. TODO: virtual table for [dbLog] on all Vertica cluster nodes.
  5. TODO: virtual table for [/var/message.log] on all Vertica cluster nodes.
+
+Designs
+=============
+
+virtual tables for Vertica datacollector files
+----------
+key algorithms:
+
+- **initialize:**
+	<code><pre>
+    
+	\# define virtual table source for datacollectors
+    verticadc.Filter = def (tableName, timePredicate)
+        return [ parse(file) for file in (files on all nodes).filter(timePredicate) ]
+      
+    \# register virtual table
+    connection = apsw.Connection(...)
+    connection.cusor().execute("attach ':memory:' as v\_internal")
+    for tablename in (datacollector table):
+  	connection.cusor().execute("create virtual table v\_internal.%s using verticadc" % tablename)
+      
+    \# start data synchronizing job if main database not in memory
+	if connection.filename != "" :
+        global syncthread
+        syncthread = threading.Thread(target=synchronizeDataCollectors, args=(connection))
+
+    </pre></code>
+
+- **synchronize data:**
+	<code><pre>
+    
+    def synchronizeDataCollectors(connection)
+  	    cursor = connection.cursor()
+        for tablename in (datacollector table):
+            \# create real SQLite table. Actually we copy DDL of origional table and add PRIMARY KEY/WITHOUT ROWID for efficent storage and performance 
+  	        cursor.execute("create table if not exists main.%s as select * from v\_internal.%s" % (tablename, tablename))
+            \# filter on time on virtual table into temp table, for better performance
+  	        cursor.execute("create temp tmpdc as select * from v\_internal.%s" where time > (select min(time) from (select max(time) time from main.%s group by node\_name))" % (tablename, tablename))
+  	        cursor.execute("insert into main.%s tmpdc where pk not in (select pk from main.%s" % (tablename, tablename))
+  	        cursor.execute("drop temp table tmpdc")
+            \# rotate tablesize 
+  	        cursor.execute("delete from main.%s where time < oldest-permit-for-size" % tablename)
+
+
+    </pre></code>
 
 Requirements
 =============
@@ -39,7 +84,9 @@ vDBAHelper is automatic bootstrapping, no manual remote installation required.
 Just clone or download this project to one of your Vertica nodes, and run following tools immediately:
 
  - **bin/sqlite.sh** : SQLite query shell
+
       <code><pre>
+
       MacBookProOfDQ:vDBAHelper liudq$ bin/sqlite.sh --help
       Usage: program [OPTIONS] FILENAME [SQL|CMD] [SQL|CMD]...
       FILENAME is the name of a SQLite database. A new database is
@@ -82,6 +129,18 @@ Just clone or download this project to one of your Vertica nodes, and run follow
       dc_allocation_pool_statistics_by_second
       dc_analyze_statistics
       ...
+      sqlite> select name from v_internal.sqlite_master order by 1;
+      name
+      dc_allocation_pool_statistics
+      dc_allocation_pool_statistics_by_day
+      dc_allocation_pool_statistics_by_hour
+      dc_allocation_pool_statistics_by_minute
+      dc_allocation_pool_statistics_by_second
+      dc_analyze_statistics
+      dc_backups
+      dc_block_memory_manager_events
+      dc_block_memory_manager_statistics
+      ...
       sqlite> select * from dc_requests_issued order by time desc limit 1;
       time|node_name|session_id|user_id|user_name|transaction_id|statement_id|request_id|request_type|label|client_label|search_path|query_start_epoch|request|is_retry
       2017-02-01 14:16:57.685396|v_vmart_node0002|v_vmart_node0002-1564:0xac4d|45035996273704962|dbadmin|49539595901079320|1|1|QUERY|||"$user", public, v_catalog, v_monitor, v_internal|1427|select * from dc_requests_issued;|0
@@ -106,10 +165,13 @@ Just clone or download this project to one of your Vertica nodes, and run follow
       user_name|count(1)|min(time)|max(time)
       dbadmin|104|2016-11-27 17:36:32.291440|2017-02-01 14:16:57.685396
 	  sqlite> 
+
       </pre></code>
 	  
  - **tests/test.sh** : unit tests
+
       <code><pre>
+
       MacBookProOfDQ:vDBAHelper liudq$ tests/test.sh --help
       Usage: tests/test.sh [OPTIONS] [SQLiteDbFile]
       Vertica OPTIONS:
@@ -131,6 +193,7 @@ Just clone or download this project to one of your Vertica nodes, and run follow
           testing on table [dc_resource_acquisitions] passed.
           testing on table [dc_catalog_operations] passed.
           ...
+
       </pre></code>
 
 If you want run vDBAHelper out of Vertica cluster nodes, such as on Mac or other linux box, you'd have a Vertica database meta file copy, replace IP of each nodes with accessible addresse, and put it in [/opt/vertica/config/admintools.conf] or attach its location to [-f | --file ] option of upper toos.
@@ -140,12 +203,24 @@ ImportError: libpython2.6.so.1.0: cannot open shared object file: No such file o
 As [eggs/apsw.so.Linux] was built on Python 2.6, it need dynamically link with libpython2.6.so.1.0 . This message means vDBAHelper can not find [libpython\*.so.1.0] under [/usr/lib\*/] . Maybe you'd check where file [libpython\*.so.1.0] locate, then run "ln -s ${PYTHONLIBPATH}/libpython\*.so.1.0 ./lib/libpython2.6.so.1.0" under $vDBAHelper path to link it.
 
 Another approach is rebuilt APSW in your system, install it or copy your new .so to [eggs/apsw.so.Linux]:
-<code><pre>
-  # download apsw source code from "https://rogerbinns.github.io/apsw/download.html#source-and-binaries"
+
+  <code><pre>
+
+  \# download apsw source code from "https://rogerbinns.github.io/apsw/download.html#source-and-binaries"
   unzip apsw-3.16.2-r1.zip
   cd apsw-3.16.2-r1
   python setup.py fetch --all build --enable-all-extensions 
-</pre></code>
+
+  </pre></code>
+
+
+How to improve query performance on virtual tables for Vertica?
+----------
+As data files of virtual tables for Vertica are text based log files on all Vertica cluster nodes, most of time will be spent on parsing text when query.
+SQLite will filter multiple times on virtual table if there are "in/or" predicates. 
+
+The best practice is creating a temp/stage table and querying on it. 
+In this project, we actually recommend you access [main.dc\_\*] tables, they are real SQLite table, data of them are syncronized from [v_internal.dc\_\*] real virtual tables for Vertica.
 
 About "time" column format in datacollectors
 ----------

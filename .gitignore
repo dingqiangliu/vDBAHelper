@@ -1,6 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[cod]
+*.py[code]
 *$py.class
 
 # Distribution / packaging
@@ -10,7 +10,7 @@ build/
 develop-eggs/
 dist/
 downloads/
-eggs/
+#eggs/
 .eggs/
 lib/
 lib64/
@@ -90,5 +90,5 @@ ENV/
 .DS_Store
 *.out
 lib/libpython2.6.so.1.0
-
+.vscode/
 

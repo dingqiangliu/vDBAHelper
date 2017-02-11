@@ -7,10 +7,13 @@
 from multiprocessing.dummy import Pool as ThreadPool
 from functools import partial
 from datetime import datetime
+from dateutil import parser as datetimeparser
 from decimal import Decimal
 import struct
+import numpy
 
 import db.vcluster as vcluster
+import db.vdatacollectors_filterdata as vdatacollectors_filterdata
 
 def setup(connection):
   """ Register datacollectors of Vertica
@@ -35,22 +38,53 @@ class DatacollectorSource:
     cursor = None 
     try :
       cursor = self.connection.cursor()
+      schemaname = ""
+      if connection.filename != "" :
+        schemaname = "v_internal"
+        cursor.execute("attach ':memory:' as %s" % schemaname)
       for tableName in self.ddls :
-        cursor.execute("create virtual table if not exists %s using verticadc" % tableName)
+        cursor.execute("create virtual table %s using verticadc" % (tableName if schemaname == "" else schemaname+"."+tableName))
 
       for tableName in self.ddls :
-        self.tables[tableName].columns = [ columnName.upper() for _, columnName, _, _, _, _ in cursor.execute("pragma table_info('%s');" % tableName) ]
-        self.tables[tableName].columns.insert(0, "ROWID")
+        columns = [ columnName.lower() for _, columnName, _, _, _, _ in cursor.execute("pragma table_info('%s');" % tableName) ]
+        columns.insert(0, u"rowid")
+        self.tables[tableName].columns = columns        
         # only keep the first part of SQL typename
-        self.tables[tableName].columnTypes = { columnName.upper(): columnType.split(' ')[0].split('(')[0].upper() for _, columnName, columnType, _, _, _ in cursor.execute("pragma table_info('%s');" % tableName) }
-        self.tables[tableName].columnTypes["ROWID"] = "INTEGER"
+        self.tables[tableName].columnTypes = { columnName.lower(): columnType.split(' ')[0].split('(')[0].lower() for _, columnName, columnType, _, _, _ in cursor.execute("pragma table_info('%s');" % tableName) }
+        self.tables[tableName].columnTypes[u"rowid"] = "integer"
+        # primary keys
+        primaryKeys = ["time", "node_name"]
+        if "transaction_id" in columns and "statement_id" in columns  and "path_id" in columns :
+          primaryKeys.append("transaction_id")
+          primaryKeys.append("statement_id")
+          primaryKeys.append("path_id")
+        elif "transaction_id" in columns and "statement_id" in columns  and "projection_oid" in columns :
+          primaryKeys.append("transaction_id")
+          primaryKeys.append("statement_id")
+          primaryKeys.append("projection_oid")
+        elif "transaction_id" in columns and "statement_id" in columns  and "sip_expr_id" in columns :
+          primaryKeys.append("transaction_id")
+          primaryKeys.append("statement_id")
+          primaryKeys.append("sip_expr_id")
+        elif "transaction_id" in columns and "statement_id" in columns :
+          primaryKeys.append("transaction_id")
+          primaryKeys.append("statement_id")
+        else :
+            for col in {"transaction_id", "txn_id", "session_id", "pool", "pool_name", "oid", "start_commit_id", "commit_epoch", "event_name", "device_name", "interface_id", "remote_node_name", "token_rounds", "path"} :
+              if col in columns :
+                primaryKeys.append(col)
+                break
 
-      # TODO: start data sync job if SQLite is not empty or memory
-      if self.connection.filename != '' :
-        print "TODO: filename =", self.connection.filename
+        self.tables[tableName].primaryKeys = primaryKeys
+      
+      # TODO: start data sync job if main database not in memory
+      if connection.filename != "" :
+        pass
     finally :
       if not cursor is None :
         cursor.close();
+
+    self.connection.setexectrace(self.exectracer)
 
 
   def Create(self, db, modulename, dbname, tablename, *args):
@@ -60,6 +94,11 @@ class DatacollectorSource:
 
   Connect=Create
   
+  def exectracer(self, cursor, sql, bindings):
+    #print "DEBUG: [EXECTRACER] CURSOR=%s, SQL=%s, BINDINGS=%s" % (cursor, sql, bindings)
+    return True
+
+
 
 # table for datacollector
 class Table:
@@ -68,12 +107,46 @@ class Table:
     self.columns = []
     self.columnTypes = {}
 
-  def BestIndex(self, *args):
-    # TODO: index on nodename and time
-    return None
+  def BestIndex(self, constraints, orderbys):
+    """
+    filter on time and node_name. Vertica datacollector log files can be looked as "order by node_name, time segmented by node_name all nodes"
+      Node: 
+      1. execution order: BestIndex+ Open Filter+ Eof+ Column*
+      2. APSW does not support WITHOUT ROWID virtual table at now. SQLite will try all possible index. eg, 
+          for "time >= ? and node_name = ? or time >= ? and node_name = ?", the logica may be filter virtual table two times: 
+          [row for rowid in ((rowid filter on index_time and index_nodename) union (rowid filter on index_time and index_nodename)))]
+    """
+
+    #print "DEBUG: [BESTINDEX] tablename=%s, constraints=%s, orderbys=%s" % (self.tablename, constraints, orderbys)
+    if  len(constraints) > 0 and numpy.bitwise_or.reduce([ 1 if columnIndex in (0,1,) else 0 for (columnIndex, predicate) in constraints ]) == 1 : 
+      # only filter on time(0) and node_name(1) column
+      # arg appearance order
+      argOrders = []
+      i = 0
+      for (columnIndex, predicate) in constraints : 
+        if columnIndex in (0, 1) :
+          argOrders.append(i)
+          i += 1
+        else :
+          argOrders.append(None)
+      # indexID: 1: time, 2: node_name, 3: time and nodename
+      indexID = numpy.bitwise_or.reduce([ columnIndex+1 if columnIndex in (0,1,) else 0 for (columnIndex, predicate) in constraints ])
+      # indexName: columnIndx_predicate[+columnIndx_predicate]*
+      indexName = "+".join([ "%s_%s" % (columnIndex, predicate) for (columnIndex, predicate) in filter(lambda x: x[0] in (0,1,), constraints) ])
+      # cost
+      cost = {1: 10, 2: 1000, 3: 1}[indexID] 
+
+      self.lastIndex = indexID
+      return (argOrders, indexID, indexName, False, cost)
+    else : 
+      return None
 
   def Open(self):
-    return Cursor(self)
+    self.lastIndex = 0
+
+    cursor = Cursor(self)
+    #print "    DEBUG: [Open] CURSOR=%s" % cursor
+    return cursor
 
   def Disconnect(self):
     pass
@@ -87,31 +160,50 @@ class Cursor:
   def __init__(self, table):
     self.table = table
     self.data = None
-
-
-  def Filter(self, *args):
     self.pos=0
 
-    if self.data is None:
-      columns = self.table.columns
 
-      # get data 
-      self.data = []
-      vc = vcluster.getVerticaCluster()
-      mch = vc.executors.remote_exec(getTableData, catalogpath=vc.catPath, tablename=self.table.tablename, columns=columns)
-      q = mch.make_receive_queue(endmarker=None)
-      terminated = 0
-      while 1:
-        channel, rows = q.get()
-        if rows is None :
-          terminated += 1
-          if terminated == len(mch):
-            break
-          continue
-        else: 
-          # TODO: multiple thread parsing for better performance
-          self.data.extend(self.parseRows(rows, columns))
-          #self.data.extend(self.parseRowsParallel(rows, columns))
+  def Filter(self, indexnum, indexname, constraintargs):
+    # get data 
+    self.data = []
+    self.pos=0
+    vc = vcluster.getVerticaCluster()
+    #predicates {columnIndx: [[predicate1:value1, predicate2:value2]]} 
+    predicates = {}
+    columns = self.table.columns
+    if not indexname is None and len(indexname) > 0 and not constraintargs is None and len(constraintargs) > 0 :
+      #indexname columnIndx_predicate_[+columnIndx_predicate]* 
+      for i, pred in enumerate(indexname.split("+")) :
+        lstPred = pred.split("_")
+        col = int(lstPred[0])
+        op = int(lstPred[1])
+        val = constraintargs[i]
+        if col == 0 :
+          # time: string to long
+          val = long(datetimeparser.parse(val).strftime('%s%f'))-946684800*1000000
+        predCol = predicates[col] if col in predicates else []
+        predCol.append([op, val])
+        predicates[col] = predCol
+
+    #print "    DEBUG: [FILTER] tablename=%s, cursor=%s, pos=%s, indexnum=%s, indexname=%s, constraintargs=%s, predicates=%s" % (self.table.tablename, self, self.pos, indexnum, indexname, constraintargs, predicates)
+    # call remote function
+    mch = vc.executors.remote_exec(vdatacollectors_filterdata)
+    mch.send_each({"catalogpath":vc.catPath, "tablename":self.table.tablename, "columns":columns, "predicates":predicates})
+
+    q = mch.make_receive_queue(endmarker=None)
+    terminated = 0
+    while 1:
+      channel, rows = q.get()
+      if rows is None :
+        terminated += 1
+        if terminated == len(mch):
+          break
+        continue
+      else: 
+        # TODO: why multiple threads parsing not benifit for performance? Where is the bottleneck?
+        self.data.extend(self.parseRows(rows, columns))
+        #self.data.extend(self.parseRowsParallel(rows, columns))
+    
 
   def parseRowsParallel(self, rows, columns):
     # multiple thread parsing for better performance
@@ -150,6 +242,8 @@ class Cursor:
     return self.data[self.pos][0]
 
   def Column(self, col):
+    #if (col == 0) : print "    DEBUG: [COLUMN] tablename=%s, cursor=%s, pos=%s" % (self.table.tablename, self, self.pos)
+
     try :
       return self.data[self.pos][1+col]
     except Exception, e:
@@ -168,27 +262,27 @@ def parseValue(sqltype, value):
     return None
   
   try :
-    if sqltype in ('INTEGER', 'INT', 'BIGINT', 'SMALLINT', 'MEDIUMINT', 'TINYINT', 'INT2', 'INT8') :
+    if sqltype in ('integer', 'int', 'bigint', 'smallint', 'mediumint', 'tinyint', 'int2', 'int8') :
       # convert unsigned long to negative long. Note: INTEGER is numeric(18,0) in Vertica, eg. '18442240474082184385' means -4503599627367231
       lValue = long(value)
       if lValue <= 0x7fffffffffffffff :
         return lValue
       else :
         return struct.unpack('l', struct.pack('L', lValue))[0] 
-    elif sqltype in ('DOUBLE', 'FLOAT', 'REAL') :
+    elif sqltype in ('double', 'float', 'real') :
       return float(value)
-    elif sqltype in ('DATE', 'DATETIME', 'TIMESTAMP') :
+    elif sqltype in ('date', 'datetime', 'timestamp') :
       lValue = long(value)
       # -9223372036854775808(-0x8000000000000000) means null in Vertica
       if lValue == -0x8000000000000000 :
           return None
       # 946684800 is secondes between '1970-01-01 00:00:00'(Python) and '2000-01-01 00:00:00'(Vertica)
       return datetime.fromtimestamp(float(lValue)/1000000+946684800).strftime("%Y-%m-%d %H:%M:%S.%f")
-    elif sqltype == 'BOOLEAN' :
+    elif sqltype == 'boolean' :
         return 'true' == value.lower()
-    elif sqltype in ('DECIMAL', 'NUMERIC', 'BOOLEAN') :
+    elif sqltype in ('decimal', 'numeric', 'boolean') :
       return Decimal(value)
-    elif sqltype == 'BLOB' :
+    elif sqltype == 'blob' :
       return buffer(value)
     else :
       # others are str. 
@@ -218,65 +312,10 @@ def getDDLs(channel, catalogpath):
       lines[0] = lines[0].replace(":dcschema.", "")
       # pattern: CREATE TABLE tablename(
       tablename = re.search("^(\s*\w+\s+\w+\s+)(\w+)", lines[0]).group(2)
+      # APSW does not support WITHOUT ROWID virtual table: ddls[tablename] = "".join(lines).replace(');', ', PRIMARY KEY ("node_name", "time")) WITHOUT ROWID;')
       ddls[tablename] = "".join(lines)
 
   if not channel.isclosed():
     channel.send(ddls)
-
-
-def getTableData(channel, catalogpath, tablename, columns):
-  from multiprocessing.dummy import Pool as ThreadPool
-  from functools import partial
-  import os
-  import glob
-  
-  data=[]
-
-  batchsize=100000
-
-  nodeName = channel.gateway.id.split('-')[0] # remove the tailing '-slave'
-  path = '%s/%s_catalog/DataCollector' % (catalogpath, nodeName)
-  nodeNum = int(nodeName[-4:])
-
-  # log filename rule from tablename: remove leading 'dc_', remove '_' and capitalize first character of each word
-  logFilePatten = "".join([w.capitalize() for w in tablename.split('_')[1:] ])
-  recBegin=":DC" + logFilePatten
-  recEnd="." 
-  counter=1
-  dictColumns = { columnName: None for columnName in columns } # Note: lookup in dictionary except array for better performace 
-  # TODO: multiple thread parsing for better performance, but keep time order?
-  for f in glob.glob(path + "/" + logFilePatten + "_*.log"):
-    try :
-      with open(f) as fin :
-        row = []
-        for line in fin :
-          line = line[:-1] # remove tailing '\n'
-          if line == recBegin :
-            pass
-            # ROWID
-            row.append(str(counter*10000 + nodeNum))
-          elif line == recEnd :
-            if len(row) > 0 :
-              data.append('\1'.join(row))
-
-              row = []
-              counter+=1
-            if counter % batchsize == 0 :
-              channel.send('\2'.join(data))
-              data = []
-          else :
-            lparts = line.split(":")
-            columnName = lparts[0].upper()
-            if columnName in dictColumns :
-              columnValue = ":".join(lparts[1:]) if len(lparts) > 0 else ""
-              row.append(columnValue)
-    except IOError, e :
-      # ignore "IOError: [Errno 2] No such file or directory...", when datacollectors file rotating
-      if 'No such file or directory' in str(e) :
-        pass
-    
-  if not channel.isclosed() and len(data) > 0 :
-    channel.send('\2'.join(data))
-    data = []
 
 
