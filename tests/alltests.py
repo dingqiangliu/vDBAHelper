@@ -17,14 +17,22 @@ if __name__ == "__main__":
   parser.add_option("-f", "--file", dest="vMetaFile", default="/opt/vertica/config/admintools.conf") 
   parser.add_option("-u", "--user", dest="vAdminOSUser", default="dbadmin") 
   (options, args) = parser.parse_args()
-  vcluster.getVerticaCluster(vDbName = options.vDBName, vMetaFile = options.vMetaFile, vAdminOSUser = options.vAdminOSUser)
+  
+  vc = None
+  try :
+    vcluster.getVerticaCluster(vDbName = options.vDBName, vMetaFile = options.vMetaFile, vAdminOSUser = options.vAdminOSUser)
+  except Exception, e:
+    print """ERROR: connect to Vertica cluster failed because [%s: %s].
+You can not access newest info of Vertica.
+	  """ % (e.__class__.__name__, str(e))
 
   sqliteDBFile = ""
   if len(args) > 0 :
     sqliteDBFile = args[0]
   CONNECTION = apsw.Connection(sqliteDBFile)
-  vdatacollectors.setup(CONNECTION)
 
+  if not vc is None :
+    vdatacollectors.setup(CONNECTION)
 
   suiteDataCollector = unittest.makeSuite(TestDataCollectors, 'test')
   

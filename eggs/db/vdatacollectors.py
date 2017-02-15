@@ -4,9 +4,12 @@
 # Description: SQLite virtual tables for Vertica data collectors
 # Author: DingQiang Liu
 
+import atexit
 from multiprocessing.dummy import Pool as ThreadPool
 from functools import partial
+import threading
 from datetime import datetime
+import time
 from dateutil import parser as datetimeparser
 from decimal import Decimal
 import struct
@@ -14,6 +17,21 @@ import numpy
 
 import db.vcluster as vcluster
 import db.vdatacollectors_filterdata as vdatacollectors_filterdata
+
+def getLastSQLiteActivityTime() :
+  global __g_LastSQLiteActivityTime
+  try:
+    if not __g_LastSQLiteActivityTime is None :
+      return __g_LastSQLiteActivityTime
+  except NameError:
+    __g_LastSQLiteActivityTime = time.time()
+  return __g_LastSQLiteActivityTime
+
+  
+def setLastSQLiteActivityTime(newtime) :
+  global __g_LastSQLiteActivityTime
+  __g_LastSQLiteActivityTime = newtime
+
 
 def setup(connection):
   """ Register datacollectors of Vertica
@@ -24,12 +42,13 @@ def setup(connection):
   DatacollectorSource(connection);
 
 
+
 # module for datacollector
 class DatacollectorSource:
   def __init__(self, connection):
     self.tables = {}
     self.connection = connection
-    self.connection.createmodule("verticadc", self)
+    connection.createmodule("verticadc", self)
   
     # create datacollector virtual tables
     vc = vcluster.getVerticaCluster()
@@ -37,7 +56,7 @@ class DatacollectorSource:
 
     cursor = None 
     try :
-      cursor = self.connection.cursor()
+      cursor = connection.cursor()
       schemaname = ""
       if connection.filename != "" :
         schemaname = "v_internal"
@@ -70,21 +89,72 @@ class DatacollectorSource:
           primaryKeys.append("transaction_id")
           primaryKeys.append("statement_id")
         else :
-            for col in {"transaction_id", "txn_id", "session_id", "pool", "pool_name", "oid", "start_commit_id", "commit_epoch", "event_name", "device_name", "interface_id", "remote_node_name", "token_rounds", "path"} :
+            for col in {"transaction_id", "txn_id", "session_id", "pool", "pool_name", "oid", "start_commit_id", "commit_epoch", "event_name", "device_name", "interface_id", "remote_node_name", "token_rounds", "path", "feature"} :
               if col in columns :
                 primaryKeys.append(col)
                 break
 
         self.tables[tableName].primaryKeys = primaryKeys
-      
-      # TODO: start data sync job if main database not in memory
+
+
+      # start data sync job if main database not in memory
+      self.syncJobCursor = None
       if connection.filename != "" :
-        pass
+        # start data sync job
+        self.syncJobCursor = connection.cursor()
+        self.stopSyncJobEvent = threading.Event()
+        t = threading.Thread(target=self.syncJob)
+        t.daemon = True
+        t.start()
+        # stop data sync job automatically when exiting
+        atexit.register(self.stopSyncJob)
+
     finally :
       if not cursor is None :
         cursor.close();
 
-    self.connection.setexectrace(self.exectracer)
+    connection.setexectrace(self.exectracer)
+
+
+  def stopSyncJob(self) :
+    self.stopSyncJobEvent.set()
+
+  
+  def syncJob(self) :
+    cursor = self.syncJobCursor
+    while not self.stopSyncJobEvent.is_set() :
+      for tablename in self.tables :
+        # active sync job after at least 5 seconds of last sqlite activity
+        #time.sleep(1)
+        while time.time() - getLastSQLiteActivityTime() < 30 :
+          time.sleep(10);
+
+        try :
+          tbegin = time.time()
+
+          # create real SQLite table. Actually we copy DDL of origional table and add PRIMARY KEY/WITHOUT ROWID for efficent storage and performance
+          tables = [ t for (t) in cursor.execute("select tbl_name from sqlite_master where lower(tbl_name)  = ?", (tablename, )) ]
+          if len(tables) == 0 :
+            cursor.execute("drop table if exists %s" % tablename+"_tmp")
+            
+            # TODO: set primary key for datacollectors
+            cursor.execute(self.ddls[tablename].replace(tablename, tablename+"_tmp").replace(");", ",PRIMARY KEY(%s)) WITHOUT ROWID;" % ",".join(self.tables[tablename].primaryKeys)))
+            #cursor.execute(self.ddls[tablename].replace(tablename, tablename+"_tmp"))
+            
+            cursor.execute("insert into %s select * from %s" % (tablename+"_tmp", tablename))
+            cursor.execute("alter table %s rename to %s" % (tablename+"_tmp", tablename))
+          else :
+            # filter on time on virtual table into temp table, for better performance
+            cursor.execute("drop table if exists __tmpdc")
+            cursor.execute("create temp table __tmpdc as select * from v_internal.%s where time > (select min(time) from (select max(time) time from main.%s group by node_name))" % (tablename, tablename))
+            cursor.execute("insert into main.%s select * from __tmpdc where (%s) not in (select %s from main.%s)" % (tablename, ",".join(self.tables[tablename].primaryKeys), ",".join(self.tables[tablename].primaryKeys), tablename))
+            cursor.execute("drop table if exists __tmpdc")
+            # TODO: rotate tablesize
+            #cursor.execute("delete from main.%s where time < oldest-permit-for-size" % tablename)
+          
+          #print "DEBUG: [syncJob] sync data of table [%s] in %.1f seconds." % (tablename, time.time() - tbegin)
+        except Exception, e:
+          print "ERROR: sync data for table [%s] from Vertica because [%s: %s]" % (tablename, e.__class__.__name__, str(e))
 
 
   def Create(self, db, modulename, dbname, tablename, *args):
@@ -95,7 +165,12 @@ class DatacollectorSource:
   Connect=Create
   
   def exectracer(self, cursor, sql, bindings):
-    #print "DEBUG: [EXECTRACER] CURSOR=%s, SQL=%s, BINDINGS=%s" % (cursor, sql, bindings)
+    if not cursor is self.syncJobCursor :
+      # ignore background sync job
+	    # tell background sync job it's busy now.
+      setLastSQLiteActivityTime(time.time())
+      #print "DEBUG: [EXECTRACER] CURSOR=%s, SQL=%s, BINDINGS=%s" % (cursor, sql, bindings)
+
     return True
 
 
@@ -136,14 +211,11 @@ class Table:
       # cost
       cost = {1: 10, 2: 1000, 3: 1}[indexID] 
 
-      self.lastIndex = indexID
       return (argOrders, indexID, indexName, False, cost)
     else : 
       return None
 
   def Open(self):
-    self.lastIndex = 0
-
     cursor = Cursor(self)
     #print "    DEBUG: [Open] CURSOR=%s" % cursor
     return cursor
@@ -180,7 +252,8 @@ class Cursor:
         val = constraintargs[i]
         if col == 0 :
           # time: string to long
-          val = long(datetimeparser.parse(val).strftime('%s%f'))-946684800*1000000
+          if not val is None :
+            val = long(datetimeparser.parse(val).strftime('%s%f'))-946684800*1000000
         predCol = predicates[col] if col in predicates else []
         predCol.append([op, val])
         predicates[col] = predCol
@@ -258,7 +331,7 @@ class Cursor:
 
 def parseValue(sqltype, value):
   # Till now, Vertica datacollector tables only use types: BOOLEAN, FLOAT, INTEGER, TIMESTAMP WITH TIME ZONE, VARCHAR
-  if len(value) == 0:
+  if (len(value) == 0) and not sqltype in ('varchar', 'char') :
     return None
   
   try :

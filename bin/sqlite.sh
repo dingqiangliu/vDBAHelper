@@ -63,11 +63,18 @@ pscript=$(cat <<-EOF
 	import apsw
 	import sys
 	import signal
+	import time
 	
 	import db.vcluster as vcluster
 	import db.vdatacollectors as vdatacollectors
 
-	vcluster.getVerticaCluster(vDbName = '${vDbName}', vMetaFile = '${vMetaFile}', vAdminOSUser = '${vAdminOSUser}')
+	vc = None
+	try :
+	  vc = vcluster.getVerticaCluster(vDbName = '${vDbName}', vMetaFile = '${vMetaFile}', vAdminOSUser = '${vAdminOSUser}')
+	except Exception, e:
+	  print """ERROR: connect to Vertica cluster failed because [%s: %s].
+You can not access newest info of Vertica.
+	  """ % (e.__class__.__name__, str(e))
 
 	s=apsw.Shell()
 	argsOptionAndDbfile=[a for a in sys.argv[1:] if a.startswith("-")]
@@ -76,7 +83,8 @@ pscript=$(cat <<-EOF
 	  argsOptionAndDbfile.append(argsCmdSQL.pop(0))
 	
 	s.process_args(argsOptionAndDbfile)
-	vdatacollectors.setup(s.db)
+	if not vc is None :
+	  vdatacollectors.setup(s.db)
 	if len(argsCmdSQL) > 0 :
 	  for cs in argsCmdSQL :
 	    if cs.startswith(".") :
@@ -84,7 +92,28 @@ pscript=$(cat <<-EOF
 	    else:
 	      s.process_sql(cs)
 	else:
-	  s.cmdloop()
+	  # tell background sync job it's busy now.
+	  __process_sql = s.process_sql
+	  def wrapProcessSQL(*args, **kargs) :
+	    vdatacollectors.setLastSQLiteActivityTime(time.time())
+	    s.db.interrupt()
+	    __process_sql(*args, **kargs)
+	    vdatacollectors.setLastSQLiteActivityTime(time.time())
+	  s.process_sql = wrapProcessSQL
+    
+	  __process_complete_line = s.process_complete_line
+	  def wrapProcessCmdLine(*args, **kargs) :
+	    vdatacollectors.setLastSQLiteActivityTime(time.time())
+	    __process_complete_line(*args, **kargs)
+	  s.process_complete_line = wrapProcessCmdLine
+
+	  intro="""
+Welcome to vDBAHelper! 
+Powered by SQLite version %s (APSW %s)
+Enter ".help" for instructions
+Enter SQL statements terminated with a ";"
+""" % (apsw.sqlitelibversion(), apsw.apswversion())
+	  s.cmdloop(intro)
 	
 EOF
 )
