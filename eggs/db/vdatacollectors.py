@@ -13,7 +13,7 @@ import time
 from dateutil import parser as datetimeparser
 from decimal import Decimal
 import struct
-import numpy
+from operator import ior
 
 import db.vcluster as vcluster
 import db.vdatacollectors_filterdata as vdatacollectors_filterdata
@@ -193,7 +193,7 @@ class Table:
     """
 
     #print "DEBUG: [BESTINDEX] tablename=%s, constraints=%s, orderbys=%s" % (self.tablename, constraints, orderbys)
-    if  len(constraints) > 0 and numpy.bitwise_or.reduce([ 1 if columnIndex in (0,1,) else 0 for (columnIndex, predicate) in constraints ]) == 1 : 
+    if len(constraints) > 0 and any([ 1 if columnIndex in (0,1,) else 0 for (columnIndex, predicate) in constraints ]) == 1 : 
       # only filter on time(0) and node_name(1) column
       # arg appearance order
       argOrders = []
@@ -205,7 +205,7 @@ class Table:
         else :
           argOrders.append(None)
       # indexID: 1: time, 2: node_name, 3: time and nodename
-      indexID = numpy.bitwise_or.reduce([ columnIndex+1 if columnIndex in (0,1,) else 0 for (columnIndex, predicate) in constraints ])
+      indexID = reduce(ior, [ columnIndex+1 if columnIndex in (0,1,) else 0 for (columnIndex, predicate) in constraints ])
       # indexName: columnIndx_predicate[+columnIndx_predicate]*
       indexName = "+".join([ "%s_%s" % (columnIndex, predicate) for (columnIndex, predicate) in filter(lambda x: x[0] in (0,1,), constraints) ])
       # cost
