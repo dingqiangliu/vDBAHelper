@@ -9,6 +9,7 @@ from optparse import OptionParser
 
 import db.vcluster as vcluster
 import db.vdatacollectors as vdatacollectors
+from testdb.dbtestcase import setConnection
 from testdb.testDataCollectors import *
 
 if __name__ == "__main__":
@@ -20,7 +21,7 @@ if __name__ == "__main__":
   
   vc = None
   try :
-    vcluster.getVerticaCluster(vDbName = options.vDBName, vMetaFile = options.vMetaFile, vAdminOSUser = options.vAdminOSUser)
+    vc = vcluster.getVerticaCluster(vDbName = options.vDBName, vMetaFile = options.vMetaFile, vAdminOSUser = options.vAdminOSUser)
   except Exception, e:
     print """ERROR: connect to Vertica cluster failed because [%s: %s].
 You can not access newest info of Vertica.
@@ -29,14 +30,16 @@ You can not access newest info of Vertica.
   sqliteDBFile = ""
   if len(args) > 0 :
     sqliteDBFile = args[0]
-  CONNECTION = apsw.Connection(sqliteDBFile)
+      
+  connection = apsw.Connection(sqliteDBFile)
+  setConnection(connection)
 
   if not vc is None :
-    vdatacollectors.setup(CONNECTION)
+    vdatacollectors.setup(connection)
 
   suiteDataCollector = unittest.makeSuite(TestDataCollectors, 'test')
   
-  alltests = unittest.TestSuite((suiteDataCollector))
+  alltests = unittest.TestSuite((suiteDataCollector, ))
   
   runner = unittest.TextTestRunner(verbosity=2)
   runner.run(alltests)

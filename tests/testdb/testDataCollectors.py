@@ -10,25 +10,10 @@ import re
 
 import apsw
 
-import db.vdatacollectors as vdatacollectors
+from testdb.dbtestcase import DBTestCase
 
 
-class TestDataCollectors(unittest.TestCase):
-  def setUp(self):
-    try :
-      global CONNECTION
-      self.connection = CONNECTION
-    except NameError:
-      self.connection = None
-    
-    if self.connection is None :
-      self.connection = apsw.Connection(":memory:")
-      vdatacollectors.setup(self.connection)
-    
-  def tearDown(self):
-    self.connection.close()
-    self.connection = None
-      
+class TestDataCollectors(DBTestCase):
   def testStorage_Layer_Statistics_By_Day(self):
     """testing dc_storage_layer_statistics_by_day, including types: TIMESTAMP WITH TIME ZONE, VARCHAR, INTEGER, FLOAT """
 
