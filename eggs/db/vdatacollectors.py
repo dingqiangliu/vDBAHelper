@@ -154,7 +154,9 @@ class DatacollectorSource:
           
           #print "DEBUG: [syncJob] sync data of table [%s] in %.1f seconds." % (tablename, time.time() - tbegin)
         except Exception, e:
-          print "ERROR: sync data for table [%s] from Vertica because [%s: %s]" % (tablename, e.__class__.__name__, str(e))
+          msg = str(e)
+          if not "InterruptError:" in msg :
+            print "ERROR: sync data for table [%s] from Vertica because [%s]" % (tablename, msg)
 
 
   def Create(self, db, modulename, dbname, tablename, *args):

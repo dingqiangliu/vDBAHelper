@@ -96,13 +96,13 @@ You can not access newest info of Vertica.
 	  __process_sql = s.process_sql
 	  def wrapProcessSQL(*args, **kargs) :
 	    vdatacollectors.setLastSQLiteActivityTime(time.time())
-	    s.db.interrupt()
 	    __process_sql(*args, **kargs)
 	    vdatacollectors.setLastSQLiteActivityTime(time.time())
 	  s.process_sql = wrapProcessSQL
     
 	  __process_complete_line = s.process_complete_line
 	  def wrapProcessCmdLine(*args, **kargs) :
+	    s.db.interrupt()
 	    vdatacollectors.setLastSQLiteActivityTime(time.time())
 	    __process_complete_line(*args, **kargs)
 	  s.process_complete_line = wrapProcessCmdLine
