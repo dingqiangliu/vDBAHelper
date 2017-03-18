@@ -6,11 +6,13 @@
 
 import unittest
 from optparse import OptionParser
+import os
+
+import apsw
 
 import db.vcluster as vcluster
-import db.vdatacollectors as vdatacollectors
+import db.vsource as vsource
 from testdb.dbtestcase import setConnection
-from testdb.testDataCollectors import *
 
 if __name__ == "__main__":
   parser = OptionParser()  
@@ -35,11 +37,16 @@ You can not access newest info of Vertica.
   setConnection(connection)
 
   if not vc is None :
-    vdatacollectors.setup(connection)
+    vsource.setup(connection)
 
-  suiteDataCollector = unittest.makeSuite(TestDataCollectors, 'test')
-  
-  alltests = unittest.TestSuite((suiteDataCollector, ))
-  
+  loader = unittest.TestLoader()
+  loader.sortTestMethodsUsing = cmp
+  loader.testMethodPrefix = "test"
+  loader.suiteClass = unittest.TestSuite
+  if len(args) > 1 :
+    alltests = unittest.TestSuite((loader.loadTestsFromNames(args[1:]),))
+  else :
+    alltests = unittest.TestSuite((loader.discover(os.path.dirname(os.path.realpath(__file__))),))
+    
   runner = unittest.TextTestRunner(verbosity=2)
   runner.run(alltests)

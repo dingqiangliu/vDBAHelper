@@ -29,7 +29,7 @@ profile=0
 # process and remove additional options
 usage(){
   cat <<-EOF
-Usage: ${0} [OPTIONS] [SQLiteDbFile]
+Usage: ${0} [OPTIONS] [SQLiteDbFile] [casename1] [casename2] [...]
 Vertica OPTIONS:
    -d | --database VerticaDBName   Vertica database name, default is the first database in meta file(/opt/vertica/config/admintools.conf)
    -f | --file verticaMetaFile     Vertica database meta file, default is (/opt/vertica/config/admintools.conf)

@@ -66,7 +66,7 @@ pscript=$(cat <<-EOF
 	import time
 	
 	import db.vcluster as vcluster
-	import db.vdatacollectors as vdatacollectors
+	import db.vsource as vsource
 
 	vc = None
 	try :
@@ -84,7 +84,7 @@ You can not access newest info of Vertica.
 	
 	s.process_args(argsOptionAndDbfile)
 	if not vc is None :
-	  vdatacollectors.setup(s.db)
+	  vsource.setup(s.db)
 	if len(argsCmdSQL) > 0 :
 	  for cs in argsCmdSQL :
 	    if cs.startswith(".") :
@@ -95,15 +95,15 @@ You can not access newest info of Vertica.
 	  # tell background sync job it's busy now.
 	  __process_sql = s.process_sql
 	  def wrapProcessSQL(*args, **kargs) :
-	    vdatacollectors.setLastSQLiteActivityTime(time.time())
+	    vsource.setLastSQLiteActivityTime(time.time())
 	    __process_sql(*args, **kargs)
-	    vdatacollectors.setLastSQLiteActivityTime(time.time())
+	    vsource.setLastSQLiteActivityTime(time.time())
 	  s.process_sql = wrapProcessSQL
     
 	  __process_complete_line = s.process_complete_line
 	  def wrapProcessCmdLine(*args, **kargs) :
 	    s.db.interrupt()
-	    vdatacollectors.setLastSQLiteActivityTime(time.time())
+	    vsource.setLastSQLiteActivityTime(time.time())
 	    __process_complete_line(*args, **kargs)
 	  s.process_complete_line = wrapProcessCmdLine
 

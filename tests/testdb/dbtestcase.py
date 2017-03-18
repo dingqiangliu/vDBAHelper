@@ -8,7 +8,7 @@ import unittest
 
 import apsw
 
-import db.vdatacollectors as vdatacollectors
+import db.vsource as vsource
 
 
 def getConnection() :
@@ -47,7 +47,7 @@ class DBTestCase(unittest.TestCase):
     if self.connection is None :
       self.newConnection = True
       self.connection = apsw.Connection(":memory:")
-      vdatacollectors.setup(self.connection)
+      vsource.setup(self.connection)
     
   def tearDown(self):
     if self.newConnection : 
