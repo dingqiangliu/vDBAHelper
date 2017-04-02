@@ -1,4 +1,5 @@
 #!/usr/bin/python
+#encoding: utf-8
 #
 # Copyright (c) 2006 - 2017, Hewlett-Packard Development Co., L.P. 
 # Description: SQLite virtual tables for Vertica data collectors
@@ -11,6 +12,20 @@ import glob
 
 
 def prevRow(lines, recBegin, nFrom=None, nTo=None):
+    """
+    get previous row from back end.
+
+    args : 
+    * lines: list of lines
+    * recBegin: mark for record begin.
+    * nFrom: upper bound of line number
+    * nTo: low bound of line number
+
+    return : 
+    * pos: line number before return row
+    * row: list of values.
+    """
+
     recEnd="." 
     row = None
     pos = (len(lines)-1) if nFrom is None else nFrom
@@ -29,6 +44,20 @@ def prevRow(lines, recBegin, nFrom=None, nTo=None):
             row.insert(0, columnValue)
 
 def nextRow(lines, recBegin, nFrom=None, nTo=None):
+    """
+    get next row from front end.
+
+    args : 
+    * lines: list of lines
+    * recBegin: mark for record begin.
+    * nFrom: low bound of line number
+    * nTo: upper bound of line number
+
+    return : 
+    * pos: line number after return  row
+    * row: list of values.
+    """
+
     recEnd="." 
     row = None
     pos = 0 if nFrom is None else nFrom
@@ -83,6 +112,8 @@ def parseFile(f, args):
                 # check first line from min side
                 pos, row = None, None
                 for pos, row in nextRow(lines, recBegin) : break
+                if row is None :
+                    return None
                 if not maxPredOp is None :
                     time = long(row[0])
                     if ((maxPredOp==2) and(time > maxPredValue) or (maxPredOp==16) and (time >= maxPredValue) or (maxPredOp==8) and (time > maxPredValue)) :
@@ -95,14 +126,14 @@ def parseFile(f, args):
                         time = long(row[0])
                         if (pos - minPos == rowWidth) and ((minPredOp==2) and (time == minPredValue) or (minPredOp==4) and (time > minPredValue) or (minPredOp==32) and (time >= minPredValue)) :
                             # found the first!
-                            minPos = pos - rowWidth
+                            minPos = pos - rowWidth # minPos/maxPos is  line number range of row, pos is line number of next row
                             break
                         elif ((minPredOp==2) and (time < minPredValue) or (minPredOp==4) and (time <= minPredValue) or (minPredOp==32) and (time < minPredValue)) :
                             # move a half up
                             minPos = pos
                         else :
                             # move a half down
-                            tmpMaxPos = pos - rowWidth
+                            tmpMaxPos = pos - rowWidth # minPos/maxPos is  line number range of row, pos is line number of next row
                         pos, row = None, None
                         for pos, row in nextRow(lines, recBegin, minPos + (tmpMaxPos - minPos)/2/rowWidth*rowWidth, tmpMaxPos) : break
                 # check last line from max side
@@ -119,7 +150,8 @@ def parseFile(f, args):
                     while not row is None :
                         time = long(row[0])
                         if (maxPos - pos == rowWidth) and ((maxPredOp==2) and(time == maxPredValue) or (maxPredOp==16) and (time < maxPredValue) or (maxPredOp==8) and (time <= maxPredValue)) :
-                            maxPos = pos + rowWidth + 1 # more +1 for comming nextRow generator
+                            # found the last!
+                            maxPos = pos + rowWidth + 1 # more +1 for comming nextRow generator. # minPos/maxPos is  line number range of row, pos is line number of previous row 
                             break
                         elif ((maxPredOp==2) and(time > maxPredValue) or (maxPredOp==16) and (time >= maxPredValue) or (maxPredOp==8) and (time > maxPredValue)) :
                             # move a half down

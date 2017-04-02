@@ -1,7 +1,8 @@
 #!/usr/bin/python
+#encoding: utf-8
 #
 # Copyright (c) 2006 - 2017, Hewlett-Packard Development Co., L.P. 
-# Description: SQLite virtual tables for Vertica data collectors
+# Description: SQLite virtual tables from Vertica cluster
 # Author: DingQiang Liu
 
 import atexit
@@ -18,6 +19,7 @@ from itertools import islice
 
 import db.vcluster as vcluster
 import db.vdatacollectors as vdatacollectors
+import db.verticalog as verticalog
 
 def getLastSQLiteActivityTime() :
   global __g_LastSQLiteActivityTime
@@ -59,9 +61,13 @@ class VerticaSource:
     self.ddls = {} # Note: ddl must end with ");" , syncJob will add primary key before it.
     self.connection = connection
     connection.createmodule("verticasource", self)
+    if connection.filename != "" :
+      connection.cursor().execute("attach ':memory:' as v_internal")
   
     # create datacollector virtual tables
     vdatacollectors.create(self)
+    # create vertica log virtual table
+    verticalog.create(self)
 
     # start data sync job if main database not in memory
     self.syncJobCursor = None
@@ -89,27 +95,53 @@ class VerticaSource:
         # active sync job after at least 5 seconds of last sqlite activity
         #time.sleep(1)
         while time.time() - getLastSQLiteActivityTime() < 30 :
-          time.sleep(10);
+          time.sleep(10)
 
         try :
           tbegin = time.time()
 
           # create real SQLite table. Actually we copy DDL of origional table and add PRIMARY KEY/WITHOUT ROWID for efficent storage and performance
           tables = [ t for (t) in cursor.execute("select tbl_name from sqlite_master where lower(tbl_name)  = ?", (tablename, )) ]
+          primaryKeys = self.tables[tablename].primaryKeys
           if len(tables) == 0 :
-            cursor.execute("drop table if exists %s" % tablename+"_tmp")
+            sql = "drop table if exists %s" % tablename+"_tmp" 
+            cursor.execute(sql)
             
             # set primary key for datacollectors
-            cursor.execute(self.ddls[tablename].replace(tablename, tablename+"_tmp").replace(");",",PRIMARY KEY(%s)) WITHOUT ROWID;" % ",".join(self.tables[tablename].primaryKeys)))
+            if (not primaryKeys is None) and (len(primaryKeys) > 0) :
+              sql = self.ddls[tablename].replace(tablename, tablename+"_tmp").replace(");",",PRIMARY KEY(%s)) WITHOUT ROWID;" % ",".join(self.tables[tablename].primaryKeys))
+            else :
+              sql = self.ddls[tablename].replace(tablename, tablename+"_tmp")
+            cursor.execute(sql)
             
-            cursor.execute("insert into %s select * from %s" % (tablename+"_tmp", tablename))
-            cursor.execute("alter table %s rename to %s" % (tablename+"_tmp", tablename))
+            sql = "insert into %s select * from %s" % (tablename+"_tmp", tablename)
+            cursor.execute(sql)
+            sql = "alter table %s rename to %s" % (tablename+"_tmp", tablename)
+            cursor.execute(sql)
           else :
             # filter on time on virtual table into temp table, for better performance
-            cursor.execute("drop table if exists __tmpdc")
-            cursor.execute("create temp table __tmpdc as select * from v_internal.%s where time > (select min(time) from (select max(time) time from main.%s group by node_name))" % (tablename, tablename))
-            cursor.execute("insert into main.%s select * from __tmpdc where (%s) not in (select %s from main.%s)" % (tablename, ",".join(self.tables[tablename].primaryKeys), ",".join(self.tables[tablename].primaryKeys), tablename))
-            cursor.execute("drop table if exists __tmpdc")
+            sql = "select count(1) from main.%s" % tablename
+            for (rowcount,) in cursor.execute(sql) : break
+            if rowcount <= 0 :
+              sql = "insert into main.%s select * from v_internal.%s" % (tablename, tablename)
+              cursor.execute(sql)
+            else:
+              sql = "drop table if exists __tmpdc"
+              cursor.execute(sql)
+              sql = "create temp table __tmpdc as select * from v_internal.%s where time > (select min(time) from (select max(time) time from main.%s group by node_name))" % (tablename, tablename)
+              cursor.execute(sql)
+              if (not primaryKeys is None) and (len(primaryKeys) > 0) :
+                sql = "insert into main.%s select * from __tmpdc where (%s) not in (select %s from main.%s)" % (tablename, ",".join(self.tables[tablename].primaryKeys), ",".join(self.tables[tablename].primaryKeys), tablename)
+                cursor.execute(sql)
+              else :
+                sql = "delete from main.%s where time in (select time from __tmpdc)" % tablename 
+                cursor.execute(sql)
+                sql = "insert into main.%s select * from __tmpdc" % tablename
+                cursor.execute(sql)
+
+              sql = "drop table if exists __tmpdc"
+              cursor.execute(sql)
+
             # TODO: rotate tablesize
             #cursor.execute("delete from main.%s where time < oldest-permit-for-size" % tablename)
           
@@ -117,7 +149,7 @@ class VerticaSource:
         except Exception, e:
           msg = str(e)
           if not "InterruptError:" in msg :
-            print "ERROR: sync data for table [%s] from Vertica because [%s]" % (tablename, msg)
+            print "ERROR: sync data for table [%s] from Vertica because [%s]. SQL = [%s]" % (tablename, msg, sql)
 
 
   def Create(self, db, modulename, dbname, tablename, *args):
@@ -142,9 +174,13 @@ class VerticaSource:
 class Table:
   def __init__(self, tablename):
     self.tablename=tablename
-    # Note: self.remotefiltermodule will be set in *.create function just after "create virtual table TABLENAME using verticasource"
     self.columns = []
     self.columnTypes = {}
+    # Note: followings will be set in *.create function just after "create virtual table TABLENAME using verticasource":
+    #   self.remotefiltermodule
+    #   self.columns
+    #   self.columnTypes
+    #   self.primaryKeys
 
   def BestIndex(self, constraints, orderbys):
     """
@@ -216,7 +252,11 @@ class Cursor:
         val = constraintargs[i]
         if col == 0 :
           # time: string to long
-          if not val is None :
+          if val is None :
+            # -9223372036854775808(-0x8000000000000000) means null in Vertica
+            val = -0x8000000000000000 
+          else :
+            # 946684800 is secondes between '1970-01-01 00:00:00'(Python) and '2000-01-01 00:00:00'(Vertica)
             val = long(datetimeparser.parse(val).strftime('%s%f'))-946684800*1000000
         predCol = predicates[col] if col in predicates else []
         predCol.append([op, val])
@@ -238,6 +278,7 @@ class Cursor:
         continue
       else: 
         # TODO: why multiple threads parsing not benifit for performance? Where is the bottleneck?
+        #print "    DEBUG: [FILTER] rows=%s" % rows
         self.data.extend(self.parseRows(rows, columns))
         #self.data.extend(self.parseRowsParallel(rows, columns))
         #self.data.extend(self.parseRowsParallel2(rows, columns))
@@ -333,12 +374,17 @@ def parseValue(sqltype, value):
     elif sqltype in ('double', 'float', 'real') :
       return float(value)
     elif sqltype in ('date', 'datetime', 'timestamp') :
-      lValue = long(value)
-      # -9223372036854775808(-0x8000000000000000) means null in Vertica
-      if lValue == -0x8000000000000000 :
-          return None
-      # 946684800 is secondes between '1970-01-01 00:00:00'(Python) and '2000-01-01 00:00:00'(Vertica)
-      return datetime.fromtimestamp(float(lValue)/1000000+946684800).strftime("%Y-%m-%d %H:%M:%S.%f")
+      try:
+        # long format
+        lValue = long(value)
+        # -9223372036854775808(-0x8000000000000000) means null in Vertica
+        if lValue == -0x8000000000000000 :
+            return None
+        # 946684800 is secondes between '1970-01-01 00:00:00'(Python) and '2000-01-01 00:00:00'(Vertica)
+        return datetime.fromtimestamp(float(lValue)/1000000+946684800).strftime("%Y-%m-%d %H:%M:%S.%f")
+      except ValueError:
+        # string format
+        return value
     elif sqltype == 'boolean' :
         return 'true' == value.lower()
     elif sqltype in ('decimal', 'numeric', 'boolean') :

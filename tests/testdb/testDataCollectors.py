@@ -1,4 +1,5 @@
 #!/usr/bin/python
+#encoding: utf-8
 #
 # Copyright (c) 2006 - 2017, Hewlett-Packard Development Co., L.P. 
 # Description: testing cases for SQLite virtual tables of Vertica data collectors
@@ -75,59 +76,59 @@ class TestDataCollectors(DBTestCase):
         select /*testFilters*/ n1, n2, ti t1, datetime(strftime('%s',ti) + (strftime('%s',tx)-strftime('%s',ti))/10, 'unixepoch') t2
         from (
           select min(node_name) n1, max(node_name) n2, min(time) ti, max(time) tx
-          from dc_storage_layer_statistics_by_day
-          where node_name in (select distinct node_name from dc_storage_layer_statistics_by_day order by node_name limit 2)
+          from dc_storage_layer_statistics
+          where node_name in (select distinct node_name from dc_storage_layer_statistics order by node_name limit 2)
         ) t;
         """
       for (n1, n2, t1, t2) in cursor.execute(sql) :
         # filter on "time = t1"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where time = ? order by time", (t1,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where time = ? order by time", (t1,)): pass
         # filter on "time < t2"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where time < ? order by time", (t2,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where time < ? order by time", (t2,)): pass
         # filter on "time <= t2"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where time <= ? order by time", (t2,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where time <= ? order by time", (t2,)): pass
         # filter on "time >= t1 and time <= t2"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where time >= ? and time <= ? order by time", (t1, t2,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where time >= ? and time <= ? order by time", (t1, t2,)): pass
         # filter on "time >= t1 and time < t2"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where time >= ? and time < ? order by time", (t1, t2,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where time >= ? and time < ? order by time", (t1, t2,)): pass
         # filter on "time between t1 and t2"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where time between ? and ? order by time", (t1, t2,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where time between ? and ? order by time", (t1, t2,)): pass
             
         # filter on "node_name = n1"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name = ? order by node_name", (n1,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name = ? order by node_name", (n1,)): pass
         # filter on "node_name < n2"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name < ? order by node_name", (n2,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name < ? order by node_name", (n2,)): pass
         # filter on "node_name <= n2"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name <= ? order by node_name", (n2,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name <= ? order by node_name", (n2,)): pass
         # filter on "node_name >= n1 and node_name <= n2"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name >= ? and node_name <= ? order by node_name", (n1, n2,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name >= ? and node_name <= ? order by node_name", (n1, n2,)): pass
         # filter on "node_name >= n1 and node_name < n2"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name >= ? and node_name < ? order by node_name", (n1, n2,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name >= ? and node_name < ? order by node_name", (n1, n2,)): pass
         # filter on "node_name between n1 and n2"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name between ? and ? order by node_name", (n1, n2,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name between ? and ? order by node_name", (n1, n2,)): pass
         # filter on "node_name = n1 or node_name = n2"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name = ? or node_name = ? order by node_name", (n1, n2,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name = ? or node_name = ? order by node_name", (n1, n2,)): pass
         # filter on "node_name in (n1, n2)"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name in (?, ?) order by node_name", (n1, n2,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name in (?, ?) order by node_name", (n1, n2,)): pass
 
         # filter on "time = t1 and node_name = n1"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where time = ? and node_name = ?", (t1, n1,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where time = ? and node_name = ?", (t1, n1,)): pass
         # filter on "node_name = n1 and time = t1 order by node_name, time""
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name = ? and time = ?", (n1, t1,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name = ? and time = ?", (n1, t1,)): pass
         # filter on "time = t1 and node_name = n1 order by time, node_name"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where time = ? and node_name = ? order by time, node_name", (t1, n1,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where time = ? and node_name = ? order by time, node_name", (t1, n1,)): pass
         # filter on "node_name = n1 and time = t1 order by node_name, time""
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name = ? and time = ? order by node_name, time", (n1, t1,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name = ? and time = ? order by node_name, time", (n1, t1,)): pass
         # filter on "node_name = n1 and time = t1 order by time, node_name""
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name = ? and time = ? order by time, node_name", (n1, t1,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name = ? and time = ? order by time, node_name", (n1, t1,)): pass
         # filter on "time = t1 or node_name = n1"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where time = ? or node_name = ? order by time, node_name", (t1, n1,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where time = ? or node_name = ? order by time, node_name", (t1, n1,)): pass
         # filter on "node_name = n1 and time = t1 and storage_id=1 order by time, node_name"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name = ? and time = ? and storage_id = ? order by time, node_name", (n1, t1, 1,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name = ? and time = ? and storage_id = ? order by time, node_name", (n1, t1, 1,)): pass
         # filter on "node_name = n1 and time = t1 and storage_id=1"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name = ? and time = ? and storage_id = ?", (n1, t1, 1,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name = ? and time = ? and storage_id = ?", (n1, t1, 1,)): pass
         # filter on "node_name = n1 and time = t1 or storage_id=1"
-        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics_by_day where node_name = ? and time = ? or storage_id = ?", (n1, t1, 1,)): pass
+        for r in cursor.execute("select /*testFilters*/ * from dc_storage_layer_statistics where node_name = ? and time = ? or storage_id = ?", (n1, t1, 1,)): pass
     except :
       self.fail(traceback.format_exc().decode(sys.stdout.encoding))
     finally :
@@ -136,7 +137,7 @@ class TestDataCollectors(DBTestCase):
 
 
   def testZ_OtherTables(self):
-    """testing other tables except dc_storage_layer_statistics_by_day, dc_requests_completed """
+    """testing other tables except dc_storage_layer_statistics, dc_requests_completed """
     
     cursor = None 
     try :
@@ -146,7 +147,7 @@ class TestDataCollectors(DBTestCase):
       sql = """
         select tbl_name from sqlite_master
         where lower(tbl_name) like 'dc__%' 
-          and not lower(tbl_name) in ('dc_storage_layer_statistics_by_day', 'dc_requests_completed', 'dc_lock_attempts')
+          and not lower(tbl_name) in ('dc_storage_layer_statistics', 'dc_requests_completed', 'dc_lock_attempts')
         """
       tables = [ t for (t) in cursor.execute(sql) ]
       for tablename in tables :

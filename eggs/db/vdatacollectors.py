@@ -13,6 +13,10 @@ def create(vs):
 
   vc = vcluster.getVerticaCluster()
   ddls = vc.executors[0].remote_exec(getDDLs, catalogpath=vc.catPath).receive()
+
+  #TODO: debug dc_requests_issued
+  #ddls = {"dc_requests_issued": ddls["dc_requests_issued"]}
+
   vs.ddls.update(ddls)
 
   cursor = None 
@@ -21,7 +25,7 @@ def create(vs):
     schemaname = ""
     if vs.connection.filename != "" :
       schemaname = "v_internal"
-      cursor.execute("attach ':memory:' as %s" % schemaname)
+
     for tableName in ddls :
       cursor.execute("create virtual table %s using verticasource" % (tableName if schemaname == "" else schemaname+"."+tableName))
       vs.tables[tableName].remotefiltermodule = vdatacollectors_filterdata
