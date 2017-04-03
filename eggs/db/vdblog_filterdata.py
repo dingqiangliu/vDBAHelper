@@ -24,7 +24,7 @@ class LogFile:
         self.filesize = fo.tell()
 
 
-    def __readblocks(self, forward, pfrom=None, pto=None, anchor=None, blocksize=1024):
+    def __readblocks(self, forward, pfrom=None, pto=None, anchor=None, blocksize=4096):
         """
         Generate blocks of file's contents.
           
@@ -48,53 +48,57 @@ class LogFile:
             self.fo.seek(anchor)
             pos = anchor
 
-        moredata = True
-        while moredata :
-            if forward :
-                if anchor != pfrom :
-                    # adjust pos align with line according anchor, move to begin of row
-                    searching = True
-                    line = ""
-                    while searching and (pos > pfrom):
-                        length = min(blocksize, pos - pfrom)
-                        self.fo.seek(pos-length)
-                        block = self.fo.read(length) + line
-                        lines = block.split("\n")
-                        pos += 1 # move forward 1 position early for comming loop, as there is no "\n" character in last item of lines,  
-                        for i in range(len(lines) - 1, -1, -1):
-                            line = lines[i]
-                            pos -= len(line) + 1
-                            # match format of a row
-                            if not ROWPATTERN.search(line) is None :
-                                self.fo.seek(pos)
-                                searching = False
-                                break
+        if forward :
+            if anchor != pfrom :
+                # adjust pos align with line according anchor, move to begin of row
+                searching = True
+                line = ""
+                while searching and (pos > pfrom):
+                    length = min(blocksize, pos - pfrom)
+                    self.fo.seek(pos-length)
+                    block = self.fo.read(length) + line # attach first "line"" of next block to avoid broking real line
+                    pos += len(line)
+                    lines = block.split("\n")
+                    pos += 1 # move forward 1 position early for comming loop, as there is no "\n" character in last item of lines,  
+                    for i in range(len(lines) - 1, -1, -1):
+                        line = lines[i]
+                        pos -= len(line) + 1
+                        # match format of a row
+                        if not ROWPATTERN.search(line) is None :
+                            self.fo.seek(pos)
+                            searching = False
+                            break
+            moredata = True
+            while moredata :
                 length = min(blocksize, pto - pos)
                 pos += length
                 moredata = (pos < pto) 
                 if length > 0 :
                     # saving a movement, as sequential reading forward
                     yield pos-length, self.fo.read(length)
-            else :
-                if anchor != pto :
-                    # adjust pos align with line according anchor, move to end of row
-                    searching = True
-                    line = ""
-                    while searching and (pos < pto):
-                        length = min(blocksize, pto - pos)
-                        block = line + self.fo.read(length)
-                        lines = block.split("\n")
-                        linesCount = len(lines)
-                        for i in range(linesCount) :
-                            line = lines[i]
-                            pos += len(line) + 1
-                            if i == linesCount - 1 :
-                                pos -= 1 # move backward 1 position, as there is no "\n" character in last item of lines 
-                            # match format of a row
-                            if not ROWPATTERN.search(line) is None :
-                                pos -= 1 # move backward 1 position, skip "\n" to avoid prevRow always try the last empty line 
-                                searching = False
-                                break
+        else :
+            if anchor != pto :
+                # adjust pos align with line according anchor, move to end of row
+                searching = True
+                line = ""
+                while searching and (pos < pto):
+                    length = min(blocksize, pto - pos)
+                    block = line + self.fo.read(length) # attach first "line"" of next block to avoid broking real line
+                    pos -= len(line)
+                    lines = block.split("\n")
+                    linesCount = len(lines)
+                    for i in range(linesCount) :
+                        line = lines[i]
+                        pos += len(line) + 1
+                        if i == linesCount - 1 :
+                            pos -= 1 # move backward 1 position, as there is no "\n" character in last item of lines 
+                        # match format of a row
+                        if not ROWPATTERN.search(line) is None :
+                            pos -= 1 # move backward 1 position, skip "\n" to avoid prevRow always try the last empty line 
+                            searching = False
+                            break
+            moredata = True
+            while moredata :
                 length = min(blocksize, pos - pfrom)
                 pos -= length
                 moredata = (pos > pfrom)
@@ -265,14 +269,14 @@ def parseFile(f, args):
                     return None
                 minPos = pos
                 if not maxPredOp is None :
-                    time = row[0]
+                    time = long(row[0])
                     if ((maxPredOp==2) and(time > maxPredValue) or (maxPredOp==16) and (time >= maxPredValue) or (maxPredOp==8) and (time > maxPredValue)) :
                         return None
                 # move first line from min side
                 if not minPredOp is None :
                     tmpMaxPos = maxPos if not maxPos is None else fin.filesize
                     while not row is None :
-                        time = row[0]
+                        time = long(row[0])
                         if (pos == minPos) and ((minPredOp==2) and (time == minPredValue) or (minPredOp==4) and (time > minPredValue) or (minPredOp==32) and (time >= minPredValue)) :
                             # found the first!
                             break
@@ -291,14 +295,14 @@ def parseFile(f, args):
                     return None
                 maxPos = pos + rowWidth
                 if not minPredOp is None :
-                    time = row[0]
+                    time = long(row[0])
                     if ((minPredOp==2) and (time < minPredValue) or (minPredOp==4) and (time <= minPredValue) or (minPredOp==32) and (time < minPredValue)) :
                         return None
                 # move last line from max side
                 if not maxPredOp is None :
                     tmpMinPos = minPos if not minPos is None else None 
                     while not row is None :
-                        time = row[0]
+                        time = long(row[0])
                         if (maxPos - pos == rowWidth) and ((maxPredOp==2) and(time == maxPredValue) or (maxPredOp==16) and (time < maxPredValue) or (maxPredOp==8) and (time <= maxPredValue)) :
                             # found the last!
                             break
@@ -314,6 +318,13 @@ def parseFile(f, args):
             # get result after predicates
             for _, _, row in fin.nextRow(minPos, maxPos) :
                 ltime = long(row[0])
+                # convert time format "%Y-%m-%d %H:%M:%S" to avoid input too much "0" on microsecond part when query in SQLite
+                if ltime == -0x8000000000000000 :
+                    # -9223372036854775808(-0x8000000000000000) means null in Vertica
+                    row[0] = None
+                else:
+                    # 946684800 is secondes between '1970-01-01 00:00:00'(Python) and '2000-01-01 00:00:00'(Vertica)
+                    row[0] = datetime.fromtimestamp(float(ltime)/1000000+946684800).strftime("%Y-%m-%d %H:%M:%S")
                 message = row[idxMessage]
                 # rowid = vertica_time % 9999999999999 * 1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)
                 row.insert(0, str(ltime % 9999999999999 * 1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)) )
