@@ -19,7 +19,7 @@ APSW/SQLite extensions:
      - push predicates on "time" and/or "node_name" columns to scan for better performance
 	 - sync datacollector data to SQLite native table for better performance when not busy, and query offline.
  3. virtual table for [vertica.log] on all Vertica cluster nodes.
- 4. TODO: virtual table for [dbLog] on all Vertica cluster nodes.
+ 4. virtual table for [dbLog] on all Vertica cluster nodes.
  5. TODO: virtual table for [/var/message.log] on all Vertica cluster nodes.
 
 Designs

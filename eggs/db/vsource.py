@@ -20,6 +20,7 @@ from itertools import islice
 import db.vcluster as vcluster
 import db.vdatacollectors as vdatacollectors
 import db.verticalog as verticalog
+import db.vdblog as vdblog
 
 def getLastSQLiteActivityTime() :
   global __g_LastSQLiteActivityTime
@@ -68,6 +69,8 @@ class VerticaSource:
     vdatacollectors.create(self)
     # create vertica log virtual table
     verticalog.create(self)
+    # create vertica dblog virtual table
+    vdblog.create(self)
 
     # start data sync job if main database not in memory
     self.syncJobCursor = None

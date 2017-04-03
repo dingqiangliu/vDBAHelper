@@ -2,23 +2,16 @@
 #encoding: utf-8
 #
 # Copyright (c) 2006 - 2017, Hewlett-Packard Development Co., L.P. 
-# Description: SQLite virtual table vertica_log for vertica.log files on each nodes
+# Description: SQLite virtual tables dblog for Vertica dbLog files on each nodes
 # Author: DingQiang Liu
 
 import re
 from datetime import datetime
 
-COLUMNS = ["time", "thread_name", "thread_id", "transaction_id", "component", "level", "elevel", "enode", "message"]
+COLUMNS = ["time", "component", "message"]
 idxMessage = COLUMNS.index("message")
 
-## pattern for vertica.log file, original version from Michael Flower
-#ROWPATTERN = re.compile("^(?P<time>\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d\.\d+) (?P<thread_name>[A-Za-z ]+):(?P<thread_id>0x[0-9a-f]+)-?(?P<transaction_id>[0-9a-f]+)? (?:\[(?P<component>\w+)\] \<(?P<level>\w+)\> )?(?:<(?P<elevel>\w+)> @\[?(?P<enode>\w+)\]?: )?(?P<message>.*)")
-
-# upgrade:
-#   * mark <thread_name>:<thread_id> optional to support format "2016-11-27 17:36:14.990 INFO New log"
-#   * <thread_id> of vertica 8 do not begin with "0x"
-#   * <thread_name> maybe contains "()" and numbers, eg. "TM Mergeout(01)"
-ROWPATTERN = re.compile("^(?P<time>\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d\.\d+)( (?P<thread_name>[A-Za-z0-9() ]+):(?P<thread_id>(0x)?[0-9a-f]+)-?(?P<transaction_id>[0-9a-f]+)?)? (?:\[(?P<component>\w+)\] \<(?P<level>\w+)\> )?(?:<(?P<elevel>\w+)> @\[?(?P<enode>\w+)\]?: )?(?P<message>.*)")
+ROWPATTERN = re.compile("^(?P<time>\d{2}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) ((?P<component>[A-Za-z0-9()_ ]+): )?(?P<message>.*)")
 
 class LogFile:
     """ log file class supporting bi-direction reading. """
@@ -149,6 +142,7 @@ class LogFile:
                             # pend message with multiple lines
                             row[idxMessage] = row[idxMessage] + "\n" + "\n".join( lines[lRowBegin+1:i] )
                         nRowLength = sum( [ len(ln) + 1 for ln in lines[lRowBegin:i] ] ) 
+                        row[0] = str(long(datetime.strptime(row[0], "%m/%d/%y %H:%M:%S").strftime('%s%f')) - 946684800*1000000)
                         yield posRowBegin, nRowLength, row
                     
                     # next row begain
@@ -173,6 +167,8 @@ class LogFile:
                 # pend message with multiple lines
                 row[idxMessage] = row[idxMessage] + "\n" + "\n".join( lines[lRowBegin+1:linesCount] )
             nRowLength = sum( [ len(ln) + 1 for ln in lines[lRowBegin:linesCount] ] ) - 1 # -1 as there is no "\n" character in last item of lines
+            row[0] = str(long(datetime.strptime(row[0], "%m/%d/%y %H:%M:%S").strftime('%s%f')) - 946684800*1000000)
+
             yield posRowBegin, nRowLength, row
                 
 
@@ -220,6 +216,8 @@ class LogFile:
                     nRowLength = sum( [ len(ln) + 1 for ln in lines[i:lRowEnd+1] ] ) 
                     if pos + nRowLength > pto :
                         nRowLength -= 1 # -1 as there is no "\n" character in last item of lines
+                    row[0] = str(long(datetime.strptime(row[0], "%m/%d/%y %H:%M:%S").strftime('%s%f')) - 946684800*1000000)
+
                     yield pos, nRowLength, row
                     match = None
                     lRowEnd = -1
@@ -238,19 +236,6 @@ def parseFile(f, args):
     minPredOp, minPredValue, maxPredOp, maxPredValue = None, None, None, None
     if 0 in predicates :
         for op, val in predicates[0] :
-            # time: vertica long to string format
-            try :
-                if val == -0x8000000000000000 : 
-                    # -9223372036854775808(-0x8000000000000000) means null in Vertica
-                    val = None
-                else :
-                  # 946684800 is secondes between '1970-01-01 00:00:00'(Python) and '2000-01-01 00:00:00'(Vertica)
-                  val = datetime.fromtimestamp(float(val)/1000000+946684800).strftime("%Y-%m-%d %H:%M:%S.%f")
-                  # vertica.log time format: "2008-12-19 15:28:46.123"
-                  val =  val[:-3]
-            except ValueError:
-                pass
-
             #operators = {2: "==", 4: ">", 8: "<=", 16: "<", 32: ">="}
             if op in (2, 4, 32, ) :
                 if not minPredValue is None and ((val > minPredValue) and (minPredOp == 2) or (val < minPredValue) and (op == 2)) :
@@ -328,10 +313,10 @@ def parseFile(f, args):
     
             # get result after predicates
             for _, _, row in fin.nextRow(minPos, maxPos) :
-                ltime = long(datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S.%f").strftime('%s%f'))
+                ltime = long(row[0])
                 message = row[idxMessage]
-                # rowid = (time -946684800*1000000) % 9999999999999 * 1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)
-                row.insert(0, str((ltime-946684800*1000000)%9999999999999*1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)) )
+                # rowid = vertica_time % 9999999999999 * 1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)
+                row.insert(0, str(ltime % 9999999999999 * 1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)) )
                 # node_name
                 row.insert(2, nodeName)
                 data.append('\1'.join(row))
@@ -362,8 +347,8 @@ if __name__ == '__channelexec__' :
     predicates = args["predicates"]
 
     if not 1 in predicates or all([eval("nodeName %s val" % operators[op]) for op, val in predicates[1]]) :
-        path = '%s/%s_catalog/' % (catalogpath, nodeName)
-        data = [ parseFile(path + "/vertica.log", args) ]
+        path = '%s/dbLog' % catalogpath
+        data = [ parseFile(path, args) ]
         data = [x for x in data if x is not None] # ignore empty file
   
         if not channel.isclosed() and len(data) > 0 :
