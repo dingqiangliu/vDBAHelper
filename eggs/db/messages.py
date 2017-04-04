@@ -1,28 +1,23 @@
 #!/usr/bin/python
 #
 # Copyright (c) 2006 - 2017, Hewlett-Packard Development Co., L.P. 
-# Description: SQLite virtual table vertica_log for vertica.log files on each nodes
+# Description: SQLite virtual table messages for /var/log/messages files on each nodes
 # Author: DingQiang Liu
 
 import db.vcluster as vcluster
-import db.verticalog_filterdata as verticalog_filterdata
+import db.messages_filterdata as messages_filterdata
 
 
 def create(vs):
-  """ create and register virtual table vertica_log for vertica.log."""
+  """ create and register virtual table messages for /var/log/messages."""
 
-  tableName = "vertica_log"
+  tableName = "messages"
   ddl = """
     CREATE TABLE %s (
       time timestamp,
       node_name varchar(20),
-      thread_name varchar(60),
-      thread_id varchar(28),
-      transaction_id varchar(28),
+      host_name varchar(20),
       component varchar(30),
-      level varchar(20),
-      elevel varchar(20),
-      enode varchar(20),
       message varchar(2322)
     );""" % tableName
   vs.ddls.update({tableName: ddl})
@@ -35,7 +30,7 @@ def create(vs):
       schemaname = "v_internal"
     
     cursor.execute("create virtual table %s using verticasource" % (tableName if schemaname == "" else schemaname+"."+tableName))
-    vs.tables[tableName].remotefiltermodule = verticalog_filterdata
+    vs.tables[tableName].remotefiltermodule = messages_filterdata
 
     columns = [ columnName.lower() for _, columnName, _, _, _, _ in cursor.execute("pragma table_info('%s');" % tableName) ]
     columns.insert(0, u"rowid")

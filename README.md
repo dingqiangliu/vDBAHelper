@@ -18,9 +18,10 @@ APSW/SQLite extensions:
  2. virtual tables(external table) for Vertica datacollector files on all Vertica cluster nodes. 
      - push predicates on "time" and/or "node_name" columns to scan for better performance
 	 - sync datacollector data to SQLite native table for better performance when not busy, and query offline.
- 3. virtual table for [vertica.log] on all Vertica cluster nodes.
- 4. virtual table for [dbLog] on all Vertica cluster nodes.
- 5. TODO: virtual table for [/var/message.log] on all Vertica cluster nodes.
+ 3. virtual table **vertica_log** for file **vertica.log** on all Vertica cluster nodes.
+ 4. virtual table **dblog** for file dbLog on all Vertica cluster nodes.
+ 5. virtual table **messages** for **/var/messages.log** on all Vertica cluster nodes. 
+     - Note: You should give access right of **/var/log/messages.log** on all Vertica nodes to user dbadmin first.
 
 Designs
 =============
@@ -221,6 +222,17 @@ Another approach is rebuilt APSW in your system, install it or copy your new .so
   unzip apsw-3.16.2-r1.zip
   cd apsw-3.16.2-r1
   python setup.py fetch --all build --enable-all-extensions 
+
+  </pre></code>
+
+
+IOError: [Errno 13] Permission denied: '/var/log/messages'
+----------
+If you get this error when query on **messages** table, the most possible reason is user dbadmin do not have access right for file **/var/log/messages.log** on some nodes. Please run following command on each Vertica node:
+
+  <code><pre>
+
+  sudo chmod a+r /var/log/messages
 
   </pre></code>
 

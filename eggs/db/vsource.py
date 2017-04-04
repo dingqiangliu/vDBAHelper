@@ -21,6 +21,7 @@ import db.vcluster as vcluster
 import db.vdatacollectors as vdatacollectors
 import db.verticalog as verticalog
 import db.vdblog as vdblog
+import db.messages as messages
 
 def getLastSQLiteActivityTime() :
   global __g_LastSQLiteActivityTime
@@ -71,6 +72,8 @@ class VerticaSource:
     verticalog.create(self)
     # create vertica dblog virtual table
     vdblog.create(self)
+    # create Liunx /var/log/messages virtual table
+    messages.create(self)
 
     # start data sync job if main database not in memory
     self.syncJobCursor = None
@@ -148,7 +151,7 @@ class VerticaSource:
             # TODO: rotate tablesize
             #cursor.execute("delete from main.%s where time < oldest-permit-for-size" % tablename)
           
-          #print "DEBUG: [syncJob] sync data of table [%s] in %.1f seconds." % (tablename, time.time() - tbegin)
+          print "\r\t INFO: [syncJob] sync data of table [%s] in %.1f seconds." % (tablename, time.time() - tbegin),
         except Exception, e:
           msg = str(e)
           if not "InterruptError:" in msg :
@@ -265,7 +268,7 @@ class Cursor:
         predCol.append([op, val])
         predicates[col] = predCol
 
-    #print "    DEBUG: [FILTER] tablename=%s, cursor=%s, pos=%s, indexnum=%s, indexname=%s, constraintargs=%s, predicates=%s" % (self.table.tablename, self, self.pos, indexnum, indexname, constraintargs, predicates)
+    #print "    DEBUG: [FILTER] tablename=%s, cursor=%s, pos=%s, indexnum=%s, indexname=%s, constraintargs=%s, predicates=%s, remotefiltermodule=%s" % (self.table.tablename, self, self.pos, indexnum, indexname, constraintargs, predicates, self.table.remotefiltermodule.__name__)
     # call remote function
     mch = vc.executors.remote_exec(self.table.remotefiltermodule)
     mch.send_each({"catalogpath":vc.catPath, "tablename":self.table.tablename, "columns":columns, "predicates":predicates})

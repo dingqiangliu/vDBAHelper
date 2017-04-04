@@ -1,7 +1,7 @@
 #!/usr/bin/python
 #
 # Copyright (c) 2006 - 2017, Hewlett-Packard Development Co., L.P. 
-# Description: SQLite virtual tables dblog for Vertica dbLog files on each nodes
+# Description: SQLite virtual table dblog for Vertica dbLog files on each nodes
 # Author: DingQiang Liu
 
 import db.vcluster as vcluster
@@ -9,7 +9,7 @@ import db.vdblog_filterdata as vdblog_filterdata
 
 
 def create(vs):
-  """ create and register virtual tables for Vertica datacollectors."""
+  """ create and register virtual table dblog for Vertica dbLog."""
 
   tableName = "dblog"
   ddl = """
