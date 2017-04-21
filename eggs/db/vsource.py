@@ -104,6 +104,7 @@ class VerticaSource:
           time.sleep(10)
 
         try :
+          print "\r\t [syncJob] Begin sync table [%s] at %s ..." % (tablename, datetime.now().strftime("%Y-%m-%d %H:%M:%S")) ,
           tbegin = time.time()
 
           # create real SQLite table. Actually we copy DDL of origional table and add PRIMARY KEY/WITHOUT ROWID for efficent storage and performance
@@ -151,7 +152,7 @@ class VerticaSource:
             # TODO: rotate tablesize
             #cursor.execute("delete from main.%s where time < oldest-permit-for-size" % tablename)
           
-          print "\r\t INFO: [syncJob] sync data of table [%s] in %.1f seconds." % (tablename, time.time() - tbegin),
+          print "\r\t [syncJob] synced table [%s] in %.1f seconds." % (tablename, time.time() - tbegin),
         except Exception, e:
           msg = str(e)
           if not "InterruptError:" in msg :
@@ -246,6 +247,10 @@ class Cursor:
     self.data = []
     self.pos=0
     vc = vcluster.getVerticaCluster()
+    if vc is None or len(vc.executors) == 0 :
+      print "ERROR: cluster is not accessible! You'd better restart this tool." 
+      return
+
     #predicates {columnIndx: [[predicate1:value1, predicate2:value2]]} 
     predicates = {}
     columns = self.table.columns
@@ -400,7 +405,8 @@ def parseValue(sqltype, value):
     else :
       # others are str. 
       # process escpe character in string, eg. '\n'
-      return value.decode('string_escape')
+      # return unicode for Chinese or other non-english characters. 
+      return unicode(value.decode('string_escape'), "utf-8")
   except :
     # ignore incorrect value format
     return None

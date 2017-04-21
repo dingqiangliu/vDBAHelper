@@ -52,21 +52,23 @@ key algorithms:
 - **synchronize data:**
 	<code><pre>
     
-    def synchronizeDataCollectors(connection)
-  	    cursor = connection.cursor()
-        for tablename in (datacollector table):
-            while sqlite_is_busy :
-                time.sleep();
-                
-            \# create real SQLite table. Actually we copy DDL of origional table and add PRIMARY KEY/WITHOUT ROWID for efficent storage and performance 
-  	        cursor.execute("create table if not exists main.%s as select * from v\_internal.%s" % (tablename, tablename))
-            \# filter on time on virtual table into temp table, for better performance
-  	        cursor.execute("create temp table tmpdc as select * from v\_internal.%s" where time > (select min(time) from (select max(time) time from main.%s group by node\_name))" % (tablename, tablename))
-  	        cursor.execute("insert into main.%s where pk not in (select pk from main.%s" % (tablename, tablename))
-  	        cursor.execute("drop table tmpdc")
-            \# rotate tablesize 
-  	        cursor.execute("delete from main.%s where time < oldest-permit-for-size" % tablename)
+	 def synchronizeDataCollectors(connection)
+	 	  cursor = connection.cursor()
+	 	  for tablename in (datacollector table):
+	 	  	while sqlite_is_busy :
+	 	  	 	time.sleep();
+	 	  	 
+	 	  	  \# create real SQLite table. Actually we copy DDL of origional table and add PRIMARY KEY/WITHOUT ROWID for efficent storage and performance 
+	 	  	 cursor.execute("create table if not exists main.%s as select * from v\_internal.%s" % (tablename, tablename))
 
+	 	  	 \# filter on time on virtual table into temp table, for better performance
+	 	  	 cursor.execute("create temp table tmpdc as select * from v\_internal.%s" where time > (select min(time) from (select max(time) time from main.%s group by node\_name))" % (tablename, tablename))
+	 	  	 cursor.execute("delete from main.%s where time in (select time from tempc)" % tablename)
+	 	  	 cursor.execute("insert into main.%s select * from tmpdc" % tablename)
+	 	  	 cursor.execute("drop table tmpdc")
+
+	 	  	 \# rotate tablesize 
+	 	  	 cursor.execute("delete from main.%s where time < oldest-permit-for-size" % tablename)
 
     </pre></code>
 
@@ -205,7 +207,7 @@ If you want run vDBAHelper out of Vertica cluster nodes, such as on Mac or other
 
 How to enable arrow keys, Ctrl-A/Ctrl-E/Esc-B/Esc-F and other shortcuts to explore history commands or edit in bin/sqlite.sh cli?
 ----------
-Python/APSW shell uses python readline module to process key press events. You can use "pip show readline" to confirm whether this module hss been install in your python environment.
+Python/APSW shell uses python readline module to process key press events. You can use "pip show readline" to confirm whether this module has been installed in your python environment.
 
 Sometimes you need run "pip3 uinstall readline" and run "easy_install readline" to fix wired problem.
 

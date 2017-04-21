@@ -5,6 +5,7 @@
 # Author: DingQiang Liu
 
 import os, atexit
+import socket
 from multiprocessing.dummy import Pool as ThreadPool
 from functools import partial
 import re
@@ -28,16 +29,17 @@ def getVerticaCluster(vDbName = '', vMetaFile = '/opt/vertica/config/admintools.
   global __g_verticaCluster
   
   try:
-    if not __g_verticaCluster is None :
-      return __g_verticaCluster
+    if len(__g_verticaCluster.executors) == 0 :
+      __g_verticaCluster = None
+    return __g_verticaCluster
   except NameError:
-    __g_verticaCluster = None
-
-  if __g_verticaCluster is None :
     __g_verticaCluster = VerticaCluster(vDbName, vMetaFile, vAdminOSUser)
-
-    # close VerticaCluster automatically when exiting
-    atexit.register(destroyVerticaCluster)
+    if len(__g_verticaCluster.executors) == 0 :
+      print "ERROR: cluster is not accessible!" 
+      __g_verticaCluster = None
+    else :
+      # close VerticaCluster automatically when exiting
+      atexit.register(destroyVerticaCluster)
 
   return __g_verticaCluster
 
@@ -77,30 +79,39 @@ class VerticaCluster:
 
     self.executors = execnet.Group()
 
-    # create executors sequentially
-    #self.initExecuters()
-
     # create executors in parallel
     self.initExecutersParallel()
+
     
-  def initExecuters(self) :
-    for i, host in enumerate(self.hostIPs):
-      self.executors.makegateway("ssh=%s@%s//id=%s" % (self.vAdminOSUser, host, self.nodeNames[i]))
-      
   def initExecutersParallel(self) :
     pool = ThreadPool()
     gws = pool.map(self.createExecuter, range(len(self.hostIPs)))
     pool.close()
     pool.join()
     for gw in gws :
-      self.executors._register(gw)
+      if not gw is None:
+        self.executors._register(gw)
     
+
   def createExecuter(self, i) :
-    tg = execnet.Group()
-    gw = tg.makegateway("ssh=%s@%s//id=%s" % (self.vAdminOSUser, self.hostIPs[i], self.nodeNames[i]))
-    tg._unregister(gw)
-    del gw._group
+    gw = None
+    s = socket.socket()
+    try:
+      # check connectivity 
+      s.settimeout(3)
+      s.connect((self.hostIPs[i], 22)) 
+    
+      tg = execnet.Group()
+      gw = tg.makegateway("ssh=%s@%s//id=%s" % (self.vAdminOSUser, self.hostIPs[i], self.nodeNames[i]))
+      tg._unregister(gw)
+      del gw._group
+    except Exception as e: 
+      print "ERROR: ssh port 22 ofr %s(%s) is not accessible for reason: %s! Ignore it, but you can not access newest info of this node." % (self.nodeNames[i], self.hostIPs[i], str(e))
+    finally:
+      s.close()
+
     return gw
+
 
   def destroy(self):
     if not self.executors is None :

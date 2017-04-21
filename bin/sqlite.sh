@@ -5,7 +5,11 @@
 # Author: DingQiang Liu
 
 ScriptDir=$(cd "$(dirname $0)"; pwd)
-export LD_LIBRARY_PATH="${ScriptDir}/../lib":${LD_LIBRARY_PATH}
+if [ "$(uname)" == "Darwin" ] ; then
+  export DYLD_LIBRARY_PATH="${ScriptDir}/../lib":${DYLD_LIBRARY_PATH}
+else
+  export LD_LIBRARY_PATH="${ScriptDir}/../lib":${LD_LIBRARY_PATH}
+fi
 SitePackagesDir="${ScriptDir}/../eggs"
 export PYTHONPATH="${SitePackagesDir}":${PYTHONPATH}
 PYTHON="/opt/vertica/oss/python/bin/python"
@@ -55,6 +59,11 @@ for (( n=0 ; n<argsCount ; n++ )) ; do
   esac
 done
 set -- "${args[@]}"
+
+if [ "${vMetaFile}" = "" ] ; then
+  "${PYTHON}" -c "import apsw;apsw.main()" "$@"
+  exit $?
+fi
 
 # igore Ctrl-C, avoid Ctrl-C kill ssh remote communication process when stoping current input in shell
 trap '' SIGINT

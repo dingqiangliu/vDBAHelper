@@ -9,6 +9,8 @@ import re
 from datetime import datetime
 
 COLUMNS = ["time", "thread_name", "thread_id", "transaction_id", "component", "level", "elevel", "enode", "message"]
+idxTime = COLUMNS.index("time")
+idxTransactionID = COLUMNS.index("transaction_id")
 idxMessage = COLUMNS.index("message")
 
 ## pattern for vertica.log file, original version from Michael Flower
@@ -284,14 +286,14 @@ def parseFile(f, args):
                     return None
                 minPos = pos
                 if not maxPredOp is None :
-                    time = row[0]
+                    time = row[idxTime]
                     if ((maxPredOp==2) and(time > maxPredValue) or (maxPredOp==16) and (time >= maxPredValue) or (maxPredOp==8) and (time > maxPredValue)) :
                         return None
                 # move first line from min side
                 if not minPredOp is None :
                     tmpMaxPos = maxPos if not maxPos is None else fin.filesize
                     while not row is None :
-                        time = row[0]
+                        time = row[idxTime]
                         if (pos == minPos) and ((minPredOp==2) and (time == minPredValue) or (minPredOp==4) and (time > minPredValue) or (minPredOp==32) and (time >= minPredValue)) :
                             # found the first!
                             break
@@ -310,14 +312,14 @@ def parseFile(f, args):
                     return None
                 maxPos = pos + rowWidth
                 if not minPredOp is None :
-                    time = row[0]
+                    time = row[idxTime]
                     if ((minPredOp==2) and (time < minPredValue) or (minPredOp==4) and (time <= minPredValue) or (minPredOp==32) and (time < minPredValue)) :
                         return None
                 # move last line from max side
                 if not maxPredOp is None :
                     tmpMinPos = minPos if not minPos is None else None 
                     while not row is None :
-                        time = row[0]
+                        time = row[idxTime]
                         if (maxPos - pos == rowWidth) and ((maxPredOp==2) and(time == maxPredValue) or (maxPredOp==16) and (time < maxPredValue) or (maxPredOp==8) and (time <= maxPredValue)) :
                             # found the last!
                             break
@@ -332,7 +334,12 @@ def parseFile(f, args):
     
             # get result after predicates
             for _, _, row in fin.nextRow(minPos, maxPos) :
-                ltime = long(datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S.%f").strftime('%s%f'))
+                # column transaction_id, from hex to integer
+                transactionID = row[idxTransactionID]
+                if not transactionID is None and len(transactionID) > 0:
+                    row[idxTransactionID] = str(long(transactionID, 16))
+
+                ltime = long(datetime.strptime(row[idxTime], "%Y-%m-%d %H:%M:%S.%f").strftime('%s%f'))
                 message = row[idxMessage]
                 # rowid = (time -946684800*1000000) % 9999999999999 * 1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)
                 row.insert(0, str((ltime-946684800*1000000)%9999999999999*1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)) )

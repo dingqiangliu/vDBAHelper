@@ -12,6 +12,10 @@ def create(vs):
   """ create and register virtual tables for Vertica datacollectors."""
 
   vc = vcluster.getVerticaCluster()
+  if vc is None or len(vc.executors) == 0 :
+    print "ERROR: cluster is not accessible! You'd better restart this tool." 
+    return
+
   ddls = vc.executors[0].remote_exec(getDDLs, catalogpath=vc.catPath).receive()
 
   #TODO: debug dc_requests_issued

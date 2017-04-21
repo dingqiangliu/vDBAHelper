@@ -18,7 +18,7 @@ def create(vs):
       node_name varchar(20),
       thread_name varchar(60),
       thread_id varchar(28),
-      transaction_id varchar(28),
+      transaction_id integer,
       component varchar(30),
       level varchar(20),
       elevel varchar(20),

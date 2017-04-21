@@ -1,4 +1,5 @@
 #!/usr/bin/python
+#encoding: utf-8
 #
 # Copyright (c) 2006 - 2017, Hewlett-Packard Development Co., L.P. 
 # Description: testing cases util for vDBAHelper 
@@ -23,7 +24,8 @@ if __name__ == "__main__":
   
   vc = None
   try :
-    vc = vcluster.getVerticaCluster(vDbName = options.vDBName, vMetaFile = options.vMetaFile, vAdminOSUser = options.vAdminOSUser)
+    if len(options.vMetaFile) > 0:
+      vc = vcluster.getVerticaCluster(vDbName = options.vDBName, vMetaFile = options.vMetaFile, vAdminOSUser = options.vAdminOSUser)
   except Exception, e:
     print """ERROR: connect to Vertica cluster failed because [%s: %s].
 You can not access newest info of Vertica.
