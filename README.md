@@ -77,8 +77,10 @@ Requirements
 
 Python: 2.7+
 ----------
+ - **Note:** **/opt/vertica/oss/python/bin/python** is default used if it exists. 
  1. Python 2.7.10 on RHEL6.5/RHEL7.1 tested
  2. Python 2.7.12 on macOS Sierra 10.12.2 tested
+
 
 FAQs
 =============

@@ -7,8 +7,12 @@
 
 from multiprocessing.dummy import Pool as ThreadPool
 from functools import partial
-import os
+import os, sys
 import glob
+
+
+# ignore stderr message when 'non-unicode character' == u'...' : UnicodeWarning: Unicode equal comparison failed to convert both arguments to Unicode - interpreting them as being unequal
+sys.stderr = open(os.devnull, 'w')
 
 
 def prevRow(lines, recBegin, nFrom=None, nTo=None):

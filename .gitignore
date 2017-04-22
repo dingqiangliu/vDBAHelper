@@ -90,5 +90,9 @@ ENV/
 .DS_Store
 *.out
 lib/libpython2.6.so.1.0
+etc/bookmarks
+etc/globhist
+etc/searchhist
+logs/
 .vscode/
 

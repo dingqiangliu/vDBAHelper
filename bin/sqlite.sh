@@ -69,6 +69,11 @@ fi
 trap '' SIGINT
 
 pscript=$(cat <<-EOF
+	import os
+	from logging.config import fileConfig
+	# set up the logger
+	fileConfig(os.path.realpath("${ScriptDir}/../etc/logging.ini"))
+
 	import apsw
 	import sys
 	import signal

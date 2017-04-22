@@ -4,8 +4,13 @@
 # Description: SQLite virtual tables for Vertica data collectors
 # Author: DingQiang Liu
 
+import logging
+
 import db.vcluster as vcluster
 import db.vdatacollectors_filterdata as vdatacollectors_filterdata
+
+
+logger = logging.getLogger(__name__)
 
 
 def create(vs):
@@ -13,7 +18,9 @@ def create(vs):
 
   vc = vcluster.getVerticaCluster()
   if vc is None or len(vc.executors) == 0 :
-    print "ERROR: cluster is not accessible! You'd better restart this tool." 
+    msg = "cluster is not accessible! You'd better restart this tool." 
+    print "ERROR: %s", msg
+    logger.error(msg)
     return
 
   ddls = vc.executors[0].remote_exec(getDDLs, catalogpath=vc.catPath).receive()

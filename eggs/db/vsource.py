@@ -16,12 +16,17 @@ from decimal import Decimal
 import struct
 from operator import ior
 from itertools import islice
+import logging
 
 import db.vcluster as vcluster
 import db.vdatacollectors as vdatacollectors
 import db.verticalog as verticalog
 import db.vdblog as vdblog
 import db.messages as messages
+
+
+logger = logging.getLogger(__name__)
+
 
 def getLastSQLiteActivityTime() :
   global __g_LastSQLiteActivityTime
@@ -104,7 +109,7 @@ class VerticaSource:
           time.sleep(10)
 
         try :
-          print "\r\t [syncJob] Begin sync table [%s] at %s ..." % (tablename, datetime.now().strftime("%Y-%m-%d %H:%M:%S")) ,
+          logger.info("[syncJob] Begin sync table [%s] at %s ..." % (tablename, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
           tbegin = time.time()
 
           # create real SQLite table. Actually we copy DDL of origional table and add PRIMARY KEY/WITHOUT ROWID for efficent storage and performance
@@ -152,11 +157,11 @@ class VerticaSource:
             # TODO: rotate tablesize
             #cursor.execute("delete from main.%s where time < oldest-permit-for-size" % tablename)
           
-          print "\r\t [syncJob] synced table [%s] in %.1f seconds." % (tablename, time.time() - tbegin),
+          logger.info("[syncJob] synced table [%s] in %.1f seconds." % (tablename, time.time() - tbegin))
         except Exception, e:
           msg = str(e)
           if not "InterruptError:" in msg :
-            print "ERROR: sync data for table [%s] from Vertica because [%s]. SQL = [%s]" % (tablename, msg, sql)
+            logger.exception("sync data for table [%s] from Vertica because [%s]. SQL = [%s]" % (tablename, msg, sql))
 
 
   def Create(self, db, modulename, dbname, tablename, *args):
@@ -171,7 +176,7 @@ class VerticaSource:
       # ignore background sync job
 	    # tell background sync job it's busy now.
       setLastSQLiteActivityTime(time.time())
-      #print "DEBUG: [EXECTRACER] CURSOR=%s, SQL=%s, BINDINGS=%s" % (cursor, sql, bindings)
+      logger.debug("[EXECTRACER] CURSOR=%s, SQL=%s, BINDINGS=%s" % (cursor, sql, bindings))
 
     return True
 
@@ -199,7 +204,7 @@ class Table:
           [row for rowid in ((rowid filter on index_time and index_nodename) union (rowid filter on index_time and index_nodename)))]
     """
 
-    #print "DEBUG: [BESTINDEX] tablename=%s, constraints=%s, orderbys=%s" % (self.tablename, constraints, orderbys)
+    logger.debug("[BESTINDEX] tablename=%s, constraints=%s, orderbys=%s" % (self.tablename, constraints, orderbys))
     if len(constraints) > 0 and any([ 1 if columnIndex in (0,1,) else 0 for (columnIndex, predicate) in constraints ]) == 1 : 
       # only filter on time(0) and node_name(1) column
       # arg appearance order
@@ -224,7 +229,7 @@ class Table:
 
   def Open(self):
     cursor = Cursor(self)
-    #print "    DEBUG: [Open] CURSOR=%s" % cursor
+    logger.debug("[Open] CURSOR=%s" % cursor)
     return cursor
 
   def Disconnect(self):
@@ -248,7 +253,7 @@ class Cursor:
     self.pos=0
     vc = vcluster.getVerticaCluster()
     if vc is None or len(vc.executors) == 0 :
-      print "ERROR: cluster is not accessible! You'd better restart this tool." 
+      logger.error("cluster is not accessible! You'd better restart this tool.")
       return
 
     #predicates {columnIndx: [[predicate1:value1, predicate2:value2]]} 
@@ -273,7 +278,7 @@ class Cursor:
         predCol.append([op, val])
         predicates[col] = predCol
 
-    #print "    DEBUG: [FILTER] tablename=%s, cursor=%s, pos=%s, indexnum=%s, indexname=%s, constraintargs=%s, predicates=%s, remotefiltermodule=%s" % (self.table.tablename, self, self.pos, indexnum, indexname, constraintargs, predicates, self.table.remotefiltermodule.__name__)
+    logger.debug("[FILTER] tablename=%s, cursor=%s, pos=%s, indexnum=%s, indexname=%s, constraintargs=%s, predicates=%s, remotefiltermodule=%s" % (self.table.tablename, self, self.pos, indexnum, indexname, constraintargs, predicates, self.table.remotefiltermodule.__name__))
     # call remote function
     mch = vc.executors.remote_exec(self.table.remotefiltermodule)
     mch.send_each({"catalogpath":vc.catPath, "tablename":self.table.tablename, "columns":columns, "predicates":predicates})
@@ -289,7 +294,7 @@ class Cursor:
         continue
       else: 
         # TODO: why multiple threads parsing not benifit for performance? Where is the bottleneck?
-        #print "    DEBUG: [FILTER] rows=%s" % rows
+        logger.debug("[FILTER] rows=%s" % rows)
         self.data.extend(self.parseRows(rows, columns))
         #self.data.extend(self.parseRowsParallel(rows, columns))
         #self.data.extend(self.parseRowsParallel2(rows, columns))
@@ -355,7 +360,7 @@ class Cursor:
     return self.data[self.pos][0]
 
   def Column(self, col):
-    #if (col == 0) : print "    DEBUG: [COLUMN] tablename=%s, cursor=%s, pos=%s" % (self.table.tablename, self, self.pos)
+    if (col == 0) : logger.debug( "[COLUMN] tablename=%s, cursor=%s, pos=%s" % (self.table.tablename, self, self.pos))
 
     try :
       return self.data[self.pos][1+col]

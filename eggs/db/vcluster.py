@@ -10,9 +10,12 @@ from multiprocessing.dummy import Pool as ThreadPool
 from functools import partial
 import re
 from ConfigParser import ConfigParser
+import logging
 
 import execnet
 
+
+logger = logging.getLogger(__name__)
 
 
 def getVerticaCluster(vDbName = '', vMetaFile = '/opt/vertica/config/admintools.conf', vAdminOSUser = 'dbadmin'):
@@ -35,7 +38,10 @@ def getVerticaCluster(vDbName = '', vMetaFile = '/opt/vertica/config/admintools.
   except NameError:
     __g_verticaCluster = VerticaCluster(vDbName, vMetaFile, vAdminOSUser)
     if len(__g_verticaCluster.executors) == 0 :
-      print "ERROR: cluster is not accessible!" 
+      msg = "Vertica cluster is not accessible! You can not access newest info of Vertica."
+      print "ERROR: %s", msg
+      logger.error(msg)
+
       __g_verticaCluster = None
     else :
       # close VerticaCluster automatically when exiting
@@ -102,11 +108,13 @@ class VerticaCluster:
       s.connect((self.hostIPs[i], 22)) 
     
       tg = execnet.Group()
-      gw = tg.makegateway("ssh=%s@%s//id=%s" % (self.vAdminOSUser, self.hostIPs[i], self.nodeNames[i]))
+      gw = tg.makegateway("ssh=%s@%s//id=%s//python=/opt/vertica/oss/python/bin/python" % (self.vAdminOSUser, self.hostIPs[i], self.nodeNames[i]))
       tg._unregister(gw)
       del gw._group
-    except Exception as e: 
-      print "ERROR: ssh port 22 ofr %s(%s) is not accessible for reason: %s! Ignore it, but you can not access newest info of this node." % (self.nodeNames[i], self.hostIPs[i], str(e))
+    except Exception: 
+      msg = "ssh port 22 of Vertica node %s(%s) is not accessible! Ignore it, but you can not access newest info of this node." % (self.nodeNames[i], self.hostIPs[i]) 
+      print "ERROR: %s", msg
+      logger.exception(msg)
     finally:
       s.close()
 

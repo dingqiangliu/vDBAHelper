@@ -7,6 +7,11 @@
 
 import re
 from datetime import datetime
+import os, sys
+
+
+# ignore stderr message when 'non-unicode character' == u'...' : UnicodeWarning: Unicode equal comparison failed to convert both arguments to Unicode - interpreting them as being unequal
+sys.stderr = open(os.devnull, 'w')
 
 COLUMNS = ["time", "component", "message"]
 idxMessage = COLUMNS.index("message")
