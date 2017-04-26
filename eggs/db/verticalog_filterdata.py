@@ -10,9 +10,6 @@ from datetime import datetime
 import os, sys
 
 
-# ignore stderr message when 'non-unicode character' == u'...' : UnicodeWarning: Unicode equal comparison failed to convert both arguments to Unicode - interpreting them as being unequal
-sys.stderr = open(os.devnull, 'w')
-
 COLUMNS = ["time", "thread_name", "thread_id", "transaction_id", "component", "level", "elevel", "enode", "message"]
 idxTime = COLUMNS.index("time")
 idxTransactionID = COLUMNS.index("transaction_id")
@@ -366,6 +363,9 @@ def parseFile(f, args):
 
 
 if __name__ == '__channelexec__' :
+    # ignore stderr message when 'non-unicode character' == u'...' : UnicodeWarning: Unicode equal comparison failed to convert both arguments to Unicode - interpreting them as being unequal
+    sys.stderr = open(os.devnull, 'w')
+
     nodeName = channel.gateway.id.split('-')[0] # remove the tailing '-slave'
     args = channel.receive()
     args["nodeName"] = nodeName

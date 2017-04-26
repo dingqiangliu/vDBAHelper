@@ -11,10 +11,6 @@ import os, sys
 import glob
 
 
-# ignore stderr message when 'non-unicode character' == u'...' : UnicodeWarning: Unicode equal comparison failed to convert both arguments to Unicode - interpreting them as being unequal
-sys.stderr = open(os.devnull, 'w')
-
-
 def prevRow(lines, recBegin, nFrom=None, nTo=None):
     """
     get previous row from back end.
@@ -189,6 +185,9 @@ def parseFile(f, args):
 
 
 if __name__ == '__channelexec__' :
+    # ignore stderr message when 'non-unicode character' == u'...' : UnicodeWarning: Unicode equal comparison failed to convert both arguments to Unicode - interpreting them as being unequal
+    sys.stderr = open(os.devnull, 'w')
+
     nodeName = channel.gateway.id.split('-')[0] # remove the tailing '-slave'
     args = channel.receive()
     args["nodenum"] = int(nodeName[-4:])
