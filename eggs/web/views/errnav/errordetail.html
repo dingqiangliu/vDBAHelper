@@ -1,0 +1,72 @@
+% BGCOLORS = {'FATAL': '#FF0000', 'ERROR': '#FF1493', 'WARNING': '#8B8B00'}
+<html>
+<head>
+    <title>Error Related Info</title>
+    <meta charset="utf-8" />
+    <meta http-equiv="cache-control" content="no-cache" />
+</head>
+<body>
+% if len(reasons) > 0:
+    <span>
+        <h2><b>Issue reasons:</b></h2>
+        <br/>
+%     for reason_name in reasons:
+        <table border="1">
+            <caption style="text-align:left"><b>{{reason_name}}</b></caption>
+%         rows=reasons[reason_name]
+%         for ridx in range(len(rows)):
+            <tr>
+%             row = rows[ridx]
+%             for cidx in range(len(row)):
+                <td>{{row[cidx]}}</td>
+%             end
+            </tr>
+%         end
+        </table>
+%     end
+    </span>
+    <br/>
+% end
+
+% if not verticalogs is None:
+    <span>
+        <table border="1">
+            <caption style="text-align:left"><b>Vertica logs: {{predicates}}</b></caption>
+            <tr>
+                <td><b>No.</b></td>
+                <td><b>time</b></td>
+                <td><b>node_name</b></td>
+                <td><b>thread_name</b></td>
+                <td><b>thread_id</b></td>
+                <td><b>transaction_id</b></td>
+                <td><b>component</b></td>
+                <td><b>level</b></td>
+                <td><b>elevel</b></td>
+                <td><b>enode</b></td>
+                <td><b>message</b></td>
+            </tr>
+%     num = 0
+%     for (time, node_name, thread_name, thread_id, transaction_id, component, level, elevel, enode, message, ) in verticalogs:
+%         num += 1
+%         logtype = level if (not level is None and len(level) > 0) else elevel
+%         bgcolor = '' if not logtype in BGCOLORS else BGCOLORS[logtype]
+            <tr>
+                <td bgcolor="{{bgcolor}}">{{num}}</td>
+                <td bgcolor="{{bgcolor}}">{{time}}</td>
+                <td bgcolor="{{bgcolor}}">{{node_name}}</td>
+                <td bgcolor="{{bgcolor}}">{{thread_name}}</td>
+                <td bgcolor="{{bgcolor}}">{{thread_id}}</td>
+                <td bgcolor="{{bgcolor}}">{{transaction_id}}</td>
+                <td bgcolor="{{bgcolor}}">{{component}}</td>
+                <td bgcolor="{{bgcolor}}">{{level}}</td>
+                <td bgcolor="{{bgcolor}}">{{elevel}}</td>
+                <td bgcolor="{{bgcolor}}">{{enode}}</td>
+                <td bgcolor="{{bgcolor}}">{{message}}</td>
+            </tr>
+%     end
+        </table>
+    </span>
+    <br/>
+% end
+</body>
+</html>

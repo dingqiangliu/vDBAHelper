@@ -1,0 +1,58 @@
+% MAXMSGLENGTH = 20
+<html>
+<head>
+    <title>Errors Navigation</title>
+    <meta http-equiv="cache-control" content="no-cache" />
+    <meta charset="utf-8" />
+    <script type="text/javascript" src="/static/date.js"></script>
+</head>
+<body>
+    <form name="predicates" method="POST" action="./errorlist">
+    <table border="0">
+        <caption><b>Time predicates:</b></caption>
+        <tr>
+            <td><b>Begin(<u>b</u>):</b></td>
+            <td colspan="4"><input name="dtbegin" type="text" maxlength="19" size="19" value="{{dtbegin}}" accesskey="b" /></td>
+        </tr>
+        <tr>
+            <td>&nbsp;</td>
+            <td><input type="button" value="<<" onclick="javascript: document.forms['predicates'].dtbegin.value = document.forms['predicates'].dtbegin.value.toDate().addDays(-1);" /></td>
+            <td><input type="button" value="<" onclick="javascript: document.forms['predicates'].dtbegin.value = document.forms['predicates'].dtbegin.value.toDate().addHours(-1);" /></td>
+            <td><input type="button" value=">" onclick="javascript: document.forms['predicates'].dtbegin.value = document.forms['predicates'].dtbegin.value.toDate().addHours(+1);" /></td>
+            <td><input type="button" value=">>" onclick="javascript: document.forms['predicates'].dtbegin.value = document.forms['predicates'].dtbegin.value.toDate().addDays(+1);" /></td>
+        </tr>
+        <tr>
+            <td><b>End(<u>e</u>):</b></td>
+            <td colspan="4"><input name="dtend" type="text" maxlength="19" size="19" value="{{dtend}}" accesskey="e" /></td>
+        </tr>
+        <tr>
+            <td>&nbsp;</td>
+            <td><input type="button" value="<<" onclick="javascript: document.forms['predicates'].dtend.value = document.forms['predicates'].dtend.value.toDate().addDays(-1);" /></td>
+            <td><input type="button" value="<" onclick="javascript: document.forms['predicates'].dtend.value = document.forms['predicates'].dtend.value.toDate().addHours(-1);" /></td>
+            <td><input type="button" value=">" onclick="javascript: document.forms['predicates'].dtend.value = document.forms['predicates'].dtend.value.toDate().addHours(+1);" /></td>
+            <td><input type="button" value=">>" onclick="javascript: document.forms['predicates'].dtend.value = document.forms['predicates'].dtend.value.toDate().addDays(+1);" /></td>
+        </tr>
+        <tr>
+            <td><b>Type:</b></td>
+            <td colspan="2"><input name="msgtype" type="checkbox" {{"checked" if "FATAL" in msgtype else ""}}  value="FATAL" accesskey="f" />FATAL(<u>f</u>)</td>
+            <td colspan="2"><input name="msgtype" type="checkbox" {{"checked" if "ERROR" in msgtype else ""}} value="ERROR" accesskey="R" />ERROR(<u>R</u>)</td>
+        </tr>
+        <tr>
+            <td>&nbsp;</td>
+            <td colspan="2"><input name="msgtype" type="checkbox" {{"checked" if "WARNING" in msgtype else ""}} value="WARNING" accesskey="w" />WARNING(<u>w</u>)</td>
+            <td colspan="2"><input name="msgtype" type="checkbox" {{"checked" if "ALL" in msgtype else ""}} value="ALL" accesskey="A" />ALL(<u>A</u>)<td>
+        </tr>
+        <tr>
+            <td>&nbsp;</td>
+            <td><input name="btsubmit" type="button" value="submit(o)" onclick="javascript: document.forms['predicates'].submit();" accesskey="o"  /></td>
+        </tr>
+    </table>
+    </form>
+    <table border="0">
+      % for (time, level, transaction_id, cat_name,) in errors:
+      %     transaction_id = transaction_id if not transaction_id is None else ''
+        <tr><td><a href="./errordetail?time={{time}}&tid={{transaction_id}}&dtbegin={{dtbegin}}&dtend={{dtend}}&issue={{cat_name}}" target="errordetail" >{{time}} {{level}} - {{cat_name}}</a></td></tr>
+      % end
+    </table>
+</body>
+</html>

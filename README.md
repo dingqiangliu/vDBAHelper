@@ -6,9 +6,31 @@ When managing or trouble shooting on Vertica cluster, sometimes you may meet fol
 
 We need tools to make life of Vertica DBA easier, then vDBAHelper come. 
 
+vDBAHelper is a toolkit for Vertica DBA, built on dynamic language **[Python](https://www.python.org/)**  and other open source projects, such as SQLite wrap **[APSW](https://rogerbinns.github.io/apsw/)** for query engine, lightweight distributed process framework **[execnet](http://codespeak.net/execnet/)** for distrubted process, lightweight micro web-framework **[Bottle](https://bottlepy.org/docs/dev/)** for user interface, and text mode web browser **[ELinks](http://elinks.or.cz/)** as client.
+
+vDBAHelper consolidates Vertica log files on all nodes with timeline or session/transaction, including datacollectors, vertica.log, dbLog, message.log etc, provides SQL and TUI interface to show recent issues, guide DBA navigating performance or function issues info, and related suggestions.  
+
+vDBAHelper keeps independent with Vertica and guarantee to be accessible, no matter the status of Vertica database.
+
+
+Architecture
+=============
+ 1. Text Mode Browser
+    - provide lightweight & easy-to-use interface for terminal user
+    - but serviced by web
+ 2. Web Framework
+    - knowledge blend in web flow
+    - translate actions to SQL
+ 3. Light SQL engine
+    - provide SQL analytic interface
+ 4. Distributed Process Framework
+    - send python code to each Vertica ndoe
+    - fetch and filter data on “time” or “node_name”
+
+![architecture](./imgs/architecture.png)
+
 Features
 =============
-vDBAHelper is a toolkit for Vertica DBA, built on dynamic language **[Python](https://www.python.org/)**  and other open source projects, such as SQLite wrap **[APSW](https://rogerbinns.github.io/apsw/)** for query engine, lightweight distributed process framework **[execnet](http://codespeak.net/execnet/)** for remote access.
 
 vDBAHelper has no dependence on Vertica database and clients, it send dynamic code on each Vertica node to parse log files.
 
@@ -22,55 +44,15 @@ APSW/SQLite extensions:
  4. virtual table **dblog** for file dbLog on all Vertica cluster nodes.
  5. virtual table **messages** for **/var/messages.log** on all Vertica cluster nodes. 
      - Note: You should give access right of **/var/log/messages.log** on all Vertica nodes to user dbadmin first.
+ 6. automatically execute new configuration table scripts in **./etc/${tablename}.sql** . 
 
-Designs
-=============
-
-virtual tables for Vertica datacollector files
+User interfaces through Elinks/Bottle:
 ----------
-key algorithms:
+ 1. Errors Navigation: navigate issues according to rules.
+     - identify issue according to rules in configuration tables **log_message_level**, **issue_category**, **issue_reason**.
+     - TODO: suggest actions for issue.
+ 2. TODO: Recommendations: analysis workload, resource usage etc., give tuning recommendations.
 
-- **initialize:**
-	<code><pre>
-    
-	\# define virtual table source for datacollectors
-    verticadc.Filter = def (tableName, nodePredicate, timePredicate)
-        return [ parse(file) for file in (files on all nodes).filter(nodePredicate, timePredicate) ]
-      
-    \# register virtual table
-    connection = apsw.Connection(...)
-    connection.cusor().execute("attach ':memory:' as v\_internal")
-    for tablename in (datacollector table):
-  	connection.cusor().execute("create virtual table v\_internal.%s using verticadc" % tablename)
-      
-    \# start data synchronizing job if main database not in memory
-	if connection.filename != "" :
-        threading.Thread(target=synchronizeDataCollectors, args=(connection)).start()
-
-    </pre></code>
-
-- **synchronize data:**
-	<code><pre>
-    
-	 def synchronizeDataCollectors(connection)
-	 	  cursor = connection.cursor()
-	 	  for tablename in (datacollector table):
-	 	  	while sqlite_is_busy :
-	 	  	 	time.sleep();
-	 	  	 
-	 	  	  \# create real SQLite table. Actually we copy DDL of origional table and add PRIMARY KEY/WITHOUT ROWID for efficent storage and performance 
-	 	  	 cursor.execute("create table if not exists main.%s as select * from v\_internal.%s" % (tablename, tablename))
-
-	 	  	 \# filter on time on virtual table into temp table, for better performance
-	 	  	 cursor.execute("create temp table tmpdc as select * from v\_internal.%s" where time > (select min(time) from (select max(time) time from main.%s group by node\_name))" % (tablename, tablename))
-	 	  	 cursor.execute("delete from main.%s where time in (select time from tempc)" % tablename)
-	 	  	 cursor.execute("insert into main.%s select * from tmpdc" % tablename)
-	 	  	 cursor.execute("drop table tmpdc")
-
-	 	  	 \# rotate tablesize 
-	 	  	 cursor.execute("delete from main.%s where time < oldest-permit-for-size" % tablename)
-
-    </pre></code>
 
 Requirements
 =============
@@ -90,10 +72,26 @@ How to use it?
 vDBAHelper is automatic bootstrapping, no manual remote installation required. 
 Just clone or download this project to one of your Vertica nodes, and run following tools immediately:
 
- - **bin/sqlite.sh** : SQLite query shell
-
+ - **bin/vDBAHelper.sh** : terminal user interface
       <code><pre>
+      MacBookProOfDQ:vDBAHelper liudq$ bin/vDBAHelper.sh --help
+      Usage: server.py [options]
+      Options:
+        -h, --help            show this help message and exit
+        -d VDBNAME, --database=VDBNAME
+                              Vertica database name, default is the first database
+                              in meta file(/opt/vertica/config/admintools.conf)
+        -f VMETAFILE, --file=VMETAFILE
+                              Vertica database meta file, default is
+                              /opt/vertica/config/admintools.conf
+        -u VADMINOSUSER, --user=VADMINOSUSER
+                              Vertica Administrator OS username, default is dbadmin
+      
+      MacBookProOfDQ:vDBAHelper liudq$ bin/vDBAHelper.sh </pre></code>
+      ![tui](./imgs/tui.png)
 
+ - **bin/sqlite.sh** : SQLite query shell
+      <code><pre>
       MacBookProOfDQ:vDBAHelper liudq$ bin/sqlite.sh --help
       Usage: program [OPTIONS] FILENAME [SQL|CMD] [SQL|CMD]...
       FILENAME is the name of a SQLite database. A new database is
@@ -171,40 +169,20 @@ Just clone or download this project to one of your Vertica nodes, and run follow
                is_retry = 0
       sqlite> select user_name, count(1), min(time), max(time) from dc_requests_issued group by 1;
       user_name|count(1)|min(time)|max(time)
-      dbadmin|104|2016-11-27 17:36:32.291440|2017-02-01 14:16:57.685396
-	  sqlite> 
-
-      </pre></code>
+      dbadmin|104|2016-11-27 17:36:32.291440|2017-02-01 14:16:57.685396 </pre></code>
 	  
- - **tests/test.sh** : unit tests
+**Note**: if you want run vDBAHelper out of Vertica cluster nodes, such as on Mac or other linux box, you'd have a Vertica database meta file copy, replace IP of each nodes with accessible addresse, and put it in [/opt/vertica/config/admintools.conf] or attach its location to [-f | --file ] option of upper toos.
 
-      <code><pre>
 
-      MacBookProOfDQ:vDBAHelper liudq$ tests/test.sh --help
-      Usage: tests/test.sh [OPTIONS] [SQLiteDbFile]
-      Vertica OPTIONS:
-         -d | --database VerticaDBName   Vertica database name, default is the first database in meta file(/opt/vertica/config/admintools.conf)
-         -f | --file verticaMetaFile     Vertica database meta file, default is (/opt/vertica/config/admintools.conf)
-         -u | --user verticaAdminOSUser  Vertica Administrator OS username, default is dbadmin
-         ------------------------
-         -p | --profile                  profiling tests
-         -h | --help                     show usage
-      Notes: you should confirm ssh password-less accessible those nodes IPs in Vertica database meta file with verticaAdminOSUser
-      MacBookProOfDQ:vDBAHelper liudq$ tests/test.sh 
-      testRequests_Completed (testdb.testDataCollectors.TestDataCollectors)
-      testing dc_requests_completed, including types: TIMESTAMP WITH TIME ZONE, VARCHAR, INTEGER, BOOLEAN ... ok
-      testStorage_Layer_Statistics_By_Day (testdb.testDataCollectors.TestDataCollectors)
-      testing dc_storage_layer_statistics_by_day, including types: TIMESTAMP WITH TIME ZONE, VARCHAR, INTEGER, FLOAT ... ok
-      testZ_OtherTables (testdb.testDataCollectors.TestDataCollectors)
-      testing other tables except dc_storage_layer_statistics_by_day, dc_requests_completed ... 
-          testing on table [dc_requests_retried] passed.
-          testing on table [dc_resource_acquisitions] passed.
-          testing on table [dc_catalog_operations] passed.
-          ...
+Why hotkey can not work on macOS terminal?
+----------
+vDBAHelper uses Elinks as HTML user interface. Elinks need Alt-Key to trigger accesskey in HTML.
 
-      </pre></code>
+But terminal of macOS will generate special character for Alt-Key by default. To let it work for Elinkks, you shold goto "Terminal > Preferences > Settings > Keyboard", and check ‘Use option as meta key’ at the bottom.
 
-If you want run vDBAHelper out of Vertica cluster nodes, such as on Mac or other linux box, you'd have a Vertica database meta file copy, replace IP of each nodes with accessible addresse, and put it in [/opt/vertica/config/admintools.conf] or attach its location to [-f | --file ] option of upper toos.
+Xterm has similar issue. You should run "echo 'XTerm*metaSendsEscape: true' >> ~/.Xresources" and restart your xterm.
+
+Note, hotkey/accesskey in Elinks is case sensitive, eg. you should press "ALt-Shift-A" for accesskey='A'. 
 
 
 How to enable arrow keys, Ctrl-A/Ctrl-E/Esc-B/Esc-F and other shortcuts to explore history commands or edit in bin/sqlite.sh cli?
@@ -219,26 +197,18 @@ ImportError: libpython2.6.so.1.0: cannot open shared object file: No such file o
 As [eggs/apsw.so.Linux] was built on Python 2.6, it need dynamically link with libpython2.6.so.1.0 . This message means vDBAHelper can not find [libpython\*.so.1.0] under [/usr/lib\*/] . Maybe you'd check where file [libpython\*.so.1.0] locate, then run "ln -s ${PYTHONLIBPATH}/libpython\*.so.1.0 ./lib/libpython2.6.so.1.0" under $vDBAHelper path to link it.
 
 Another approach is rebuilt APSW in your system, install it or copy your new .so to [eggs/apsw.so.Linux]:
-
   <code><pre>
-
   \# download apsw source code from "https://rogerbinns.github.io/apsw/download.html#source-and-binaries"
   unzip apsw-3.16.2-r1.zip
   cd apsw-3.16.2-r1
-  python setup.py fetch --all build --enable-all-extensions 
-
-  </pre></code>
+  python setup.py fetch --all build --enable-all-extensions </pre></code>
 
 
 IOError: [Errno 13] Permission denied: '/var/log/messages'
 ----------
 If you get this error when query on **messages** table, the most possible reason is user dbadmin do not have access right for file **/var/log/messages.log** on some nodes. Please run following command on each Vertica node:
-
   <code><pre>
-
-  sudo chmod a+r /var/log/messages
-
-  </pre></code>
+  sudo chmod a+r /var/log/messages </pre></code>
 
 
 How to improve query performance on virtual tables for Vertica?
