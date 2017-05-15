@@ -178,9 +178,9 @@ Why hotkey can not work on macOS terminal?
 ----------
 vDBAHelper uses Elinks as HTML user interface. Elinks need Alt-Key to trigger accesskey in HTML.
 
-But terminal of macOS will generate special character for Alt-Key by default. To let it work for Elinkks, you shold goto "Terminal > Preferences > Settings > Keyboard", and check ‘Use option as meta key’ at the bottom.
+But terminal of macOS will generate special character for Alt-Key by default. To let it work for Elinks, you can navigate to "Terminal > Preferences > Settings > Keyboard", and check ‘Use option as meta key’ at the bottom.
 
-Xterm has similar issue. You should run "echo 'XTerm*metaSendsEscape: true' >> ~/.Xresources" and restart your xterm.
+Xterm has similar issue. You can run "echo 'XTerm*metaSendsEscape: true' >> ~/.Xresources" and restart your xterm to fix this issue.
 
 Note, hotkey/accesskey in Elinks is case sensitive, eg. you should press "ALt-Shift-A" for accesskey='A'. 
 
@@ -189,7 +189,7 @@ How to enable arrow keys, Ctrl-A/Ctrl-E/Esc-B/Esc-F and other shortcuts to explo
 ----------
 Python/APSW shell uses python readline module to process key press events. You can use "pip show readline" to confirm whether this module has been installed in your python environment.
 
-Sometimes you need run "pip3 uinstall readline" and run "easy_install readline" to fix wired problem.
+Sometimes you need run "pip3 uinstall readline" and run "easy_install readline" to fix this wired issue.
 
 
 ImportError: libpython2.6.so.1.0: cannot open shared object file: No such file or directory?
