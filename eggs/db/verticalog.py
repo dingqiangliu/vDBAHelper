@@ -12,6 +12,7 @@ def create(vs):
   """ create and register virtual table vertica_log for vertica.log."""
 
   tableName = "vertica_log"
+  # virtual table ddl
   ddl = """
     CREATE TABLE %s (
       time timestamp,
@@ -26,6 +27,31 @@ def create(vs):
       message varchar(2322)
     );""" % tableName
   vs.ddls.update({tableName: ddl})
+
+  # full text search local storage table ddl
+  ddl4local = """
+    CREATE VIRTUAL TABLE %s USING fts4(
+      time timestamp,
+      node_name varchar(20),
+      thread_name varchar(60),
+      thread_id varchar(28),
+      transaction_id integer,
+      component varchar(30),
+      level varchar(20),
+      elevel varchar(20),
+      enode varchar(20),
+      message varchar(2322),
+      notindexed=time, 
+      notindexed=node_name, 
+      notindexed=thread_name, 
+      notindexed=thread_id, 
+      notindexed=transaction_id, 
+      notindexed=component, 
+      notindexed=level, 
+      notindexed=elevel,
+      notindexed=enode
+    );""" % tableName
+  vs.ddls4local.update({tableName: ddl4local})
 
   cursor = None 
   try :

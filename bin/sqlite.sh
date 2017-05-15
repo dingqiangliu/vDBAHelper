@@ -60,13 +60,10 @@ for (( n=0 ; n<argsCount ; n++ )) ; do
 done
 set -- "${args[@]}"
 
-if [ "${vMetaFile}" = "" ] ; then
-  "${PYTHON}" -c "import apsw;apsw.main()" "$@"
-  exit $?
-fi
-
 # igore Ctrl-C, avoid Ctrl-C kill ssh remote communication process when stoping current input in shell
-trap '' SIGINT
+if [ "${vMetaFile}" != "" ] ; then
+  trap '' SIGINT
+fi
 
 pscript=$(cat <<-EOF
 	import os
@@ -79,16 +76,8 @@ pscript=$(cat <<-EOF
 	import signal
 	import time
 	
-	import db.vcluster as vcluster
+	import db.dbmanager as dbmanager
 	import db.vsource as vsource
-
-	vc = None
-	try :
-	  vc = vcluster.getVerticaCluster(vDbName = '${vDbName}', vMetaFile = '${vMetaFile}', vAdminOSUser = '${vAdminOSUser}')
-	except Exception, e:
-	  print """ERROR: connect to Vertica cluster failed because [%s: %s].
-You can not access newest info of Vertica.
-	  """ % (e.__class__.__name__, str(e))
 
 	s=apsw.Shell()
 	argsOptionAndDbfile=[a for a in sys.argv[1:] if a.startswith("-")]
@@ -97,8 +86,9 @@ You can not access newest info of Vertica.
 	  argsOptionAndDbfile.append(argsCmdSQL.pop(0))
 	
 	s.process_args(argsOptionAndDbfile)
-	if not vc is None :
-	  vsource.setup(s.db)
+	
+	dbmanager.setup('${vDbName}', '${vMetaFile}', '${vAdminOSUser}', connection = s.db)
+
 	if len(argsCmdSQL) > 0 :
 	  for cs in argsCmdSQL :
 	    if cs.startswith(".") :

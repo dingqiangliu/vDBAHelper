@@ -10,10 +10,7 @@ from optparse import OptionParser
 import os
 import logging
 
-import apsw
-
-import db.vcluster as vcluster
-import db.vsource as vsource
+import db.dbmanager as dbmanager
 from testdb.dbtestcase import setConnection
 
 
@@ -27,24 +24,12 @@ if __name__ == "__main__":
   parser.add_option("-u", "--user", dest="vAdminOSUser", default="dbadmin") 
   (options, args) = parser.parse_args()
   
-  vc = None
-  try :
-    if len(options.vMetaFile) > 0:
-      vc = vcluster.getVerticaCluster(vDbName = options.vDBName, vMetaFile = options.vMetaFile, vAdminOSUser = options.vAdminOSUser)
-  except Exception, e:
-    msg = "connect to Vertica cluster failed.You can not access newest info of Vertica." % (e.__class__.__name__, str(e))
-    print "ERROR: %s", msg
-    logger.exception(msg)
-
   sqliteDBFile = ""
   if len(args) > 0 :
     sqliteDBFile = args[0]
       
-  connection = apsw.Connection(sqliteDBFile)
+  connection = dbmanager.setup(options.vDBName, options.vMetaFile, options.vAdminOSUser, sqliteDBFile)
   setConnection(connection)
-
-  if not vc is None :
-    vsource.setup(connection)
 
   loader = unittest.TestLoader()
   loader.sortTestMethodsUsing = cmp

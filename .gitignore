@@ -12,8 +12,8 @@ dist/
 downloads/
 #eggs/
 .eggs/
-lib/
-lib64/
+#lib/
+#lib64/
 parts/
 sdist/
 var/
@@ -89,9 +89,12 @@ ENV/
 *.un~
 .DS_Store
 *.out
+test.db*
 lib/libpython2.6.so.1.0
 etc/bookmarks
+etc/cookies
 etc/globhist
+etc/gotohist
 etc/searchhist
 logs/
 .vscode/

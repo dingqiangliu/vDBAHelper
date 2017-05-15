@@ -65,7 +65,10 @@ def splitListGroups(alist, n):
 class VerticaSource:
   def __init__(self, connection):
     self.tables = {}
-    self.ddls = {} # Note: ddl must end with ");" , syncJob will add primary key before it.
+    # ddls for virtual table
+    self.ddls = {} # Note: ddl must end with ");" , as maybe syncJob will add primary key before it to compute local storage version ddls.
+    # local storage version ddls. for complicated senario which not easy compute from  self.ddls
+    self.ddls4local = {} 
     self.connection = connection
     connection.createmodule("verticasource", self)
     if connection.filename != "" :
@@ -105,7 +108,7 @@ class VerticaSource:
       for tablename in self.tables :
         # active sync job after at least 5 seconds of last sqlite activity
         #time.sleep(1)
-        while time.time() - getLastSQLiteActivityTime() < 30 :
+        while time.time() - getLastSQLiteActivityTime() < 3*60 :
           time.sleep(10)
 
         try :
@@ -119,11 +122,14 @@ class VerticaSource:
             sql = "drop table if exists %s" % tablename+"_tmp" 
             cursor.execute(sql)
             
-            # set primary key for datacollectors
-            if (not primaryKeys is None) and (len(primaryKeys) > 0) :
-              sql = self.ddls[tablename].replace(tablename, tablename+"_tmp").replace(");",",PRIMARY KEY(%s)) WITHOUT ROWID;" % ",".join(self.tables[tablename].primaryKeys))
+            if tablename in self.ddls4local :
+              sql = self.ddls4local[tablename].replace(tablename, tablename+"_tmp")
             else :
-              sql = self.ddls[tablename].replace(tablename, tablename+"_tmp")
+              # set primary key for datacollectors
+              if (not primaryKeys is None) and (len(primaryKeys) > 0) :
+                sql = self.ddls[tablename].replace(tablename, tablename+"_tmp").replace(");",",PRIMARY KEY(%s)) WITHOUT ROWID;" % ",".join(self.tables[tablename].primaryKeys))
+              else :
+                sql = self.ddls[tablename].replace(tablename, tablename+"_tmp")
             cursor.execute(sql)
             
             sql = "insert into %s select * from %s" % (tablename+"_tmp", tablename)
