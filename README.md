@@ -50,7 +50,7 @@ User interfaces through Elinks/Bottle:
 ----------
  1. Errors Navigation: navigate issues according to rules.
      - identify issue according to rules in configuration tables **log_message_level**, **issue_category**, **issue_reason**.
-     - TODO: suggest actions for issue.
+     - recommendaton actions for issue.
  2. TODO: Recommendations: analysis workload, resource usage etc., give tuning recommendations.
 
 

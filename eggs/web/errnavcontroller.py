@@ -160,14 +160,14 @@ def errordetail(db):
                   where issue_cat_name = ? ;"""
             logger.debug("parameters=(%s), sql=%s" %(issue, sql))
             for (tablename,) in db.execute(sql, (issue,)).fetchall():
-                sql = """select reason_name, filter_columns, reason_pattern 
+                sql = """select reason_name, filter_columns, reason_pattern, action 
                       from issue_reason
                       where issue_cat_name = ? and table_name = ? 
                       order by privilege;"""
                 logger.debug("parameters=(%s, %s), sql=%s" %(issue, tablename, sql))
                 rules = db.execute(sql, (issue, tablename,)).fetchall()
-                # fill data into temp FTS table
                 if len(rules) > 0:
+                    # fill data into temp FTS table
                     tmptable = "temp.tmp_issue_analysis_%s" % randint(0, 10000)
                     sql = """drop table if exists %s;""" % tmptable
                     logger.debug("sql=%s" %sql)
@@ -184,19 +184,27 @@ def errordetail(db):
                           where time >= ? and time <= ? ;""" % (tmptable, tablename)
                     logger.debug("parameters=(%s, %s), sql=%s" %(dtbegin, dtend, sql))
                     db.execute(sql, (dtbegin, dtend))
-                # filter by rules
-                for rule in rules:
-                    reason_name, filter_columns, reason_pattern = rule[0], rule[1], rule[2]
-                    if not transaction_id is None and len(transaction_id) > 0 and 'transaction_id' in filter_columns.split(","):
-                        filterexpression = "and transaction_id = %s" % transaction_id
-                    else:
-                        filterexpression = ""
-                    sql = """select *
-                          from %s
-                          where %s match ? %s
-                          order by time desc; """ % (tmptable, tmptable.split('.')[1], filterexpression)
-                    logger.debug("parameters=(%s), sql=%s" %(reason_pattern, sql))
-                    reasons.update({reason_name: db.execute(sql, (reason_pattern, )).fetchall()})
+                    # filter by rules
+                    for rule in rules:
+                        reason_name, filter_columns, reason_pattern, action = rule[0], rule[1], rule[2], rule[3]
+                        if not transaction_id is None and len(transaction_id) > 0 and 'transaction_id' in filter_columns.split(","):
+                            filterexpression = "and transaction_id = %s" % transaction_id
+                        else:
+                            filterexpression = ""
+                        sql = """select *
+                              from %s
+                              where %s match ? %s
+                              order by time desc; """ % (tmptable, tmptable.split('.')[1], filterexpression)
+                        logger.debug("parameters=(%s), sql=%s" %(reason_pattern, sql))
+                        reasons.update({reason_name: [ \
+                            action, \
+                            db.execute(sql, (reason_pattern, )).fetchall()
+                            ]})
+                    # clear temp table
+                    sql = """drop table if exists %s;""" % tmptable
+                    logger.debug("sql=%s" %sql)
+                    db.execute(sql)
+    
 
         return template("errnav/errordetail", verticalogs=verticalogs, reasons=reasons, predicates=predicates)
     except Exception, e:

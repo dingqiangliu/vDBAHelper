@@ -12,8 +12,14 @@
         <br/>
 %     for reason_name in reasons:
         <table border="1">
-            <caption style="text-align:left"><b>{{reason_name}}</b></caption>
-%         rows=reasons[reason_name]
+            <caption style="text-align:left">
+                <span style="color:red"><b>{{reason_name}}</b></span>
+%         action = reasons[reason_name][0]
+%         if not action is None and len(action) > 0:
+                <br/>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:red"><b> Actions: </b></span>{{action}}
+%         end
+            </caption>
+%         rows=reasons[reason_name][1]
 %         for ridx in range(len(rows)):
             <tr>
 %             row = rows[ridx]

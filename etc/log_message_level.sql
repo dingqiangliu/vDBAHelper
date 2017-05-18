@@ -28,7 +28,8 @@ create table issue_reason(
     privilege integer,
     table_name varchar(30),
     filter_columns varchar(30),
-    reason_pattern varchar(200)
+    reason_pattern varchar(200),
+    action varchar(200)
 )
 ;
 
@@ -36,8 +37,8 @@ insert into log_message_level values('FATAL', ' thread_name=''SafetyShutdown'' a
 
 insert into issue_category values('node_down', 'node down', 0, 'Shutting down this node');
 
-insert into issue_reason values('node_down_network_failed', 'network failed', 'node down', 0, 'vertica_log', 'time', 'message:saw membership message 8192');
-insert into issue_reason values('node_down_node_left_cluster', 'node left cluster', 'node down', 1, 'vertica_log', 'time', 'message:nodeSetNotifier left the cluster');
+insert into issue_reason values('node_down_network_failed', 'network failed', 'node down', 0, 'vertica_log', 'time', 'message:saw membership message 8192', 'check netowrk interfaces/switch status, and errors/dropped/overrun indictors in output of ifconfig or "ip -s link" commands.');
+insert into issue_reason values('node_down_node_left_cluster', 'node left cluster', 'node down', 1, 'vertica_log', 'time', 'message:nodeSetNotifier left the cluster', Null);
 
 
 insert into issue_category values('sql_syntax_error', 'SQL syntax error', 0, 'syntax error at or near');
