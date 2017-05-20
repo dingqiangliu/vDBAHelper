@@ -8,7 +8,8 @@
 import os
 import logging
 
-from bottle import route, error, static_file, template, request, response
+from bottle import route, error, static_file, template, request, response, HTTPResponse
+import markdown2
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +18,16 @@ logger = logging.getLogger(__name__)
 def error404(error):
     """ logging 404 error """
 
-    logger.error('%s %s %s %s' % (bottle.request.remote_addr,
-                                            bottle.request.method,
-                                            bottle.request.url,
+    logger.error('%s %s %s %s' % (request.remote_addr,
+                                            request.method,
+                                            request.url,
                                             404))
-    return '[%s] not exists, sorry:(' % bottle.request.url
+    return '[%s] not exists, sorry:(' % request.url
+
+
+@route('/<filepath:re:.*\.md>')
+def root_markdown(filepath):
+    return HTTPResponse(markdown2.markdown_path('%s/%s' % (os.path.dirname(os.path.realpath(__file__)), filepath)))
 
 
 @route('/static/<filepath:path>')
