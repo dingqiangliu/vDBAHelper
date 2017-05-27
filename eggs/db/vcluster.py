@@ -39,7 +39,7 @@ def getVerticaCluster(vDbName = '', vMetaFile = '/opt/vertica/config/admintools.
     __g_verticaCluster = VerticaCluster(vDbName, vMetaFile, vAdminOSUser)
     if len(__g_verticaCluster.executors) == 0 :
       msg = "Vertica cluster is not accessible! You can not access newest info of Vertica."
-      print "ERROR: %s", msg
+      print "ERROR: %s" % msg
       logger.error(msg)
 
       __g_verticaCluster = None
@@ -112,8 +112,8 @@ class VerticaCluster:
       tg._unregister(gw)
       del gw._group
     except Exception: 
-      msg = "ssh port 22 of Vertica node %s(%s) is not accessible! Ignore it, but you can not access newest info of this node." % (self.nodeNames[i], self.hostIPs[i]) 
-      print "ERROR: %s", msg
+      msg = "ssh port 22 of Vertica node %s(%s) with user %s is not accessible! Ignore it, but you can not access newest info of this node." % (self.nodeNames[i], self.hostIPs[i], self.vAdminOSUser) 
+      print "\nERROR: %s" % msg
       logger.exception(msg)
     finally:
       s.close()
