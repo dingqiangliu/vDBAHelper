@@ -10,16 +10,17 @@
     <span>
         <h2><b>Issue reasons:</b></h2>
         <br/>
-%     for reason_name in reasons:
+%     for r in reasons:
+%         reason_name = r[0]
         <table border="1">
             <caption style="text-align:left">
                 <span style="color:red"><b>{{reason_name}}</b></span>
-%         action = reasons[reason_name][0]
+%         action = r[1]
 %         if not action is None and len(action) > 0:
                 <br/>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:red"><b> Actions: </b></span>{{action}}
 %         end
             </caption>
-%         rows=reasons[reason_name][1]
+%         rows=r[2]
 %         for ridx in range(len(rows)):
             <tr>
 %             row = rows[ridx]

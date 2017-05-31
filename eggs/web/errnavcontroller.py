@@ -153,7 +153,7 @@ def errordetail(db):
             predicates = "transaction_id = %s" % transaction_id
 
         # get issue reasons acording issue_reason
-        reasons = {}
+        reasons = []
         if not issue is None and len(issue) > 0:
             sql = """select distinct table_name
                   from issue_reason
@@ -196,10 +196,11 @@ def errordetail(db):
                               where %s match ? %s
                               order by time desc; """ % (tmptable, tmptable.split('.')[1], filterexpression)
                         logger.debug("parameters=(%s), sql=%s" %(reason_pattern, sql))
-                        reasons.update({reason_name: [ \
+                        reasons.append([ \
+                            reason_name, \
                             action, \
                             db.execute(sql, (reason_pattern, )).fetchall()
-                            ]})
+                            ])
                     # clear temp table
                     sql = """drop table if exists %s;""" % tmptable
                     logger.debug("sql=%s" %sql)
