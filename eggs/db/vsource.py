@@ -104,8 +104,19 @@ class VerticaSource:
   
   def syncJob(self) :
     cursor = self.syncJobCursor
+
+    # for performance and reducing local file size, only sync datacollectors by day and hour
+    synctables = [x for x in self.tables]
+    for tablename in self.tables :
+      if tablename.startswith("dc_") and (tablename.endswith("_by_minute") or tablename.endswith("_by_second")) :
+        if tablename in synctables :
+          synctables.remove(tablename)
+        basetable = tablename.split("_by_")[0] 
+        if basetable in synctables :
+          synctables.remove(basetable)
+
     while not self.stopSyncJobEvent.is_set() :
-      for tablename in self.tables :
+      for tablename in synctables :
         # active sync job after at least 5 seconds of last sqlite activity
         #time.sleep(1)
         while time.time() - getLastSQLiteActivityTime() < 3*60 :
