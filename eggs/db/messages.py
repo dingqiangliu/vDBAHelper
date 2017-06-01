@@ -12,6 +12,7 @@ def create(vs):
   """ create and register virtual table messages for /var/log/messages."""
 
   tableName = "messages"
+  # virtual table ddl
   ddl = """
     CREATE TABLE %s (
       time timestamp,
@@ -21,6 +22,21 @@ def create(vs):
       message varchar(2322)
     );""" % tableName
   vs.ddls.update({tableName: ddl})
+
+  # full text search local storage table ddl
+  ddl4local = """
+    CREATE VIRTUAL TABLE %s USING fts4(
+      time timestamp,
+      node_name varchar(20),
+      host_name varchar(20),
+      component varchar(30),
+      message varchar(2322),
+      notindexed=time, 
+      notindexed=node_name, 
+      notindexed=host_name, 
+      notindexed=component
+    );""" % tableName
+  vs.ddls4local.update({tableName: ddl4local})
 
   cursor = None 
   try :

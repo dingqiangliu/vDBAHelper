@@ -10,20 +10,28 @@
     <span>
         <h2><b>Issue reasons:</b></h2>
         <br/>
-%     for r in reasons:
+%     for idx, r in enumerate(reasons):
 %         reason_name = r[0]
         <table border="1">
             <caption style="text-align:left">
-                <span style="color:red"><b>{{reason_name}}</b></span>
+                <span style="color:red"><b>{{idx+1}}. {{reason_name}}</b></span>
 %         action = r[1]
 %         if not action is None and len(action) > 0:
                 <br/>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:red"><b> Actions: </b></span>{{action}}
 %         end
             </caption>
-%         rows=r[2]
-%         for ridx in range(len(rows)):
             <tr>
+                <td><b>No.</b></td>
+%         columns=r[2]
+%         for cidx in range(len(columns)):
+                <td><b>{{columns[cidx]}}</b></td>
+%         end
+            </tr>
+%         rows=r[3]
+%         for ridx in range(len(rows)):
 %             row = rows[ridx]
+            <tr>
+                <td>{{ridx+1}}</td>
 %             for cidx in range(len(row)):
                 <td>{{row[cidx]}}</td>
 %             end
@@ -35,40 +43,53 @@
     <br/>
 % end
 
+% if not messages is None:
+    <span>
+        <table border="1">
+            <caption style="text-align:left"><b>/var/log/messages: {{messagespredicates}}</b></caption>
+            <tr>
+                <td><b>No.</b></td>
+%     columns=messagescolumns
+%     for cidx in range(len(columns)):
+                <td><b>{{columns[cidx]}}</b></td>
+%     end
+            </tr>
+%     rows=messages
+%     for ridx in range(len(rows)):
+%         row = rows[ridx]
+            <tr>
+                <td>{{ridx+1}}</td>
+%         for cidx in range(len(row)):
+                <td>{{row[cidx]}}</td>
+%         end
+            </tr>
+%     end
+        </table>
+    </span>
+    <br/>
+% end
+
 % if not verticalogs is None:
     <span>
         <table border="1">
-            <caption style="text-align:left"><b>Vertica logs: {{predicates}}</b></caption>
+            <caption style="text-align:left"><b>Vertica logs: {{verticalogpredicates}}</b></caption>
             <tr>
                 <td><b>No.</b></td>
-                <td><b>time</b></td>
-                <td><b>node_name</b></td>
-                <td><b>thread_name</b></td>
-                <td><b>thread_id</b></td>
-                <td><b>transaction_id</b></td>
-                <td><b>component</b></td>
-                <td><b>level</b></td>
-                <td><b>elevel</b></td>
-                <td><b>enode</b></td>
-                <td><b>message</b></td>
+%     columns=verticalogcolumns
+%     for cidx in range(len(columns)):
+                <td><b>{{columns[cidx]}}</b></td>
+%     end
             </tr>
-%     num = 0
-%     for (time, node_name, thread_name, thread_id, transaction_id, component, level, elevel, enode, message, ) in verticalogs:
-%         num += 1
-%         logtype = level if (not level is None and len(level) > 0) else elevel
+%     rows=verticalogs
+%     for ridx in range(len(rows)):
+%         row = rows[ridx]
+%         logtype = row[6] if (not row[6] is None and len(row[6]) > 0) else row[7]
 %         bgcolor = '' if not logtype in BGCOLORS else BGCOLORS[logtype]
             <tr>
-                <td bgcolor="{{bgcolor}}">{{num}}</td>
-                <td bgcolor="{{bgcolor}}">{{time}}</td>
-                <td bgcolor="{{bgcolor}}">{{node_name}}</td>
-                <td bgcolor="{{bgcolor}}">{{thread_name}}</td>
-                <td bgcolor="{{bgcolor}}">{{thread_id}}</td>
-                <td bgcolor="{{bgcolor}}">{{transaction_id}}</td>
-                <td bgcolor="{{bgcolor}}">{{component}}</td>
-                <td bgcolor="{{bgcolor}}">{{level}}</td>
-                <td bgcolor="{{bgcolor}}">{{elevel}}</td>
-                <td bgcolor="{{bgcolor}}">{{enode}}</td>
-                <td bgcolor="{{bgcolor}}">{{message}}</td>
+                <td bgcolor="{{bgcolor}}">{{ridx+1}}</td>
+%         for cidx in range(len(row)):
+                <td bgcolor="{{bgcolor}}">{{row[cidx]}}</td>
+%         end
             </tr>
 %     end
         </table>

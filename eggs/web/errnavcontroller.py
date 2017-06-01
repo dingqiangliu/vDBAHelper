@@ -30,22 +30,8 @@ def errorlist(db):
         if msgtype is None or len(msgtype) == 0:
             msgtype = ['FATAL', 'ERROR']
 
-        # caculate level according rules in log_message_level
-        levelexpression = ""
-        sql = """select expression, name from log_message_level;"""
-        logger.debug("sql=%s" %sql)
-        for (expression, name, ) in db.execute(sql):
-            levelexpression += "when " + expression + " then '" + name + "'"
-        if len(levelexpression) > 0 :
-            levelexpression = "( case " + levelexpression + " else level end) level"
-        else :
-            levelexpression = "level"
-
-        # caculate level filter according selecting
-        levelvalues = ("'" + "','".join(msgtype) + "'") if (len(msgtype) > 0 and not 'ALL' in msgtype) else None
-        levelfilter = "where level in (%s)" % levelvalues if not levelvalues is None else ""
-
-        tmptable = "temp.tmp_vertica_log_%s" % randint(0, 10000)
+        # target table
+        tmptable = "temp.tmp_errnavlist_%s" % randint(0, 10000)
         sql = """drop table if exists %s;""" % tmptable
         logger.debug("sql=%s" %sql)
         db.execute(sql)
@@ -56,52 +42,84 @@ def errorlist(db):
               transaction_id integer,
               message varchar(2322),
               cat_name varchar(30),
+              table_name varchar(30),
               notindexed=time, 
               notindexed=level, 
               notindexed=transaction_id, 
-              notindexed=cat_name
+              notindexed=cat_name,
+              notindexed=table_name
             );""" % tmptable
         logger.debug("sql=%s" %sql)
         db.execute(sql)
-           
-        sql = """insert into %s
-            select time, level, transaction_id, message, 'Unkown' cat_name 
-            from (
-                select time, %s, transaction_id, message 
-                from vertica_log log
-                where time >= ? and time <= ? ) t0
-            %s ;""" % (tmptable, levelexpression, levelfilter)
-        logger.debug("parameters=(%s, %s), sql=%s" %(dtbegin, dtend, sql))
-        db.execute(sql, (dtbegin, dtend))
 
-        sql = """create table %s_1 as
-            select time, level, transaction_id, message, cat.name cat_name
-            from %s log, issue_category cat
-            where log.message match cat.pattern;""" % (tmptable, tmptable)
-        logger.debug("sql=%s" %sql)
-        db.execute(sql)
-            
-        sql = """delete from %s
-            where rowid in (
-              select log.rowid
-              from %s log, issue_category cat
-              where log.message match cat.pattern
-            );""" %(tmptable, tmptable)
-        logger.debug("sql=%s" %sql)
-        db.execute(sql)
-            
-        sql = """insert into %s select * from %s_1;""" % (tmptable, tmptable)
-        logger.debug("sql=%s" %sql)
-        db.execute(sql)
-            
-        sql = """select * from %s;""" % tmptable
-        logger.debug("sql=%s" %sql)
-        db.execute(sql)
+        # from each message tables
+        sql = """select distinct table_name from log_message_level order by table_name;"""
+        logger.debug("sql=%s" % sql)
+        for (messagetable, ) in db.execute(sql).fetchall():
+            cloumn_transactionid = "null"
+            cloumn_level = "null"
+            if messagetable == "vertica_log":
+                cloumn_transactionid = "transaction_id"
+                cloumn_level = "level"
+
+            # caculate level according rules in log_message_level
+            levelexpression = ""
+            sql = """select expression, name from log_message_level where table_name = ?;"""
+            logger.debug("parameters=(%s), sql=%s" %(messagetable, sql))
+            for (expression, name, ) in db.execute(sql, (messagetable,)):
+                levelexpression += "when " + expression + " then '" + name + "'"
+            if len(levelexpression) > 0 :
+                levelexpression = "( case " + levelexpression + " else %s end) level" % cloumn_level
+            else :
+                levelexpression = "%s level" % cloumn_level
+
+            # caculate level filter according selecting
+            levelvalues = ("'" + "','".join(msgtype) + "'") if (len(msgtype) > 0 and not 'ALL' in msgtype) else None
+            levelfilter = "where level in (%s)" % levelvalues if not levelvalues is None else ""
+
+            # filter messages by time and loglevel
+            sql = """insert into %s
+                select time, level, transaction_id, message, 'Unkown' cat_name, '%s' table_name
+                from (
+                    select time, %s, %s transaction_id, message 
+                    from %s log
+                    where time >= ? and time <= ? ) t0
+                %s ;""" % (tmptable, messagetable, levelexpression, cloumn_transactionid, messagetable, levelfilter)
+            logger.debug("parameters=(%s, %s), sql=%s" %(dtbegin, dtend, sql))
+            db.execute(sql, (dtbegin, dtend,))
+
+            # caculate category by pattern, set category by delete+insert 
+            sql = """drop table if exists %s_1;""" % tmptable
+            logger.debug("sql=%s" %sql)
+            db.execute(sql)
+
+            sql = """create table %s_1 as
+                select time, level, transaction_id, message, cat.name cat_name, cat.table_name
+                from %s log, issue_category cat
+                where log.message match cat.pattern 
+                    and log.table_name = cat.table_name
+                    and cat.table_name = ?;""" % (tmptable, tmptable)
+            logger.debug("parameters=(%s), sql=%s" %(messagetable, sql))
+            db.execute(sql, (messagetable,))
+                
+            sql = """delete from %s
+                where rowid in (
+                  select log.rowid
+                  from %s log, issue_category cat
+                  where log.message match cat.pattern
+                    and log.table_name = cat.table_name
+                      and cat.table_name = ?
+                );""" %(tmptable, tmptable)
+            logger.debug("parameters=(%s), sql=%s" %(messagetable, sql))
+            db.execute(sql, (messagetable,))
+                
+            sql = """insert into %s select * from %s_1;""" % (tmptable, tmptable)
+            logger.debug("sql=%s" %sql)
+            db.execute(sql)
             
         sql = """select time, level, transaction_id, cat_name
               from %s 
               order by time desc;""" % tmptable
-            
         errors = db.execute(sql)
         return template("errnav/errorlist", dtbegin=dtbegin, dtend=dtend, msgtype=msgtype, errors=errors)
     except Exception, e:
@@ -125,32 +143,63 @@ def errordetail(db):
         dtbegin = request.params['dtbegin']
         dtend = request.params['dtend']
         issue = request.params['issue']
-        predicates = ""
+
+        TIME_SPAN_SECONDS = 5
+        if '.' in time :
+            dt = datetime.strptime(time, "%Y-%m-%d %H:%M:%S.%f")
+        elif ':' in time :
+            dt = datetime.strptime(time, "%Y-%m-%d %H:%M:%S")
+        else :
+            dt = datetime.strptime(time, "%Y-%m-%d")
+        # [:-3]: "time" of vertica_log is millisecond, not microsecond
+        dtspanbegin = (dt + timedelta(seconds=-TIME_SPAN_SECONDS)).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        dtspanend = (dt + timedelta(seconds=+TIME_SPAN_SECONDS)).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            
+        messagespredicates = ""
+        # get messages by time span
+        messagespredicates = "time from %s to %s" % (dtspanbegin, dtspanend)
+        sql = """select *
+              from messages 
+              where time >= ? and time <= ?
+              order by time desc;
+              """
+        logger.debug("parameters=(%s, %s), sql=%s" %(dtspanbegin, dtspanend, sql))
+        db.execute(sql, (dtspanbegin, dtspanend))
+        try :
+            messagescolumns = [c for (c, _, ) in db.getdescription()]
+            messages = db.fetchall()
+        except :
+            messagescolumns = None
+            messages = None
+
+        verticalogpredicates = ""
         if transaction_id is None or len(transaction_id) == 0:
             # get verticalogs by time span
-            TIME_SPAN_SECONDS = 5
-            dt = datetime.strptime(time, "%Y-%m-%d %H:%M:%S.%f")
-            # [:-3]: "time" of vertica_log is millisecond, not microsecond
-            dtbegin = (dt + timedelta(seconds=-TIME_SPAN_SECONDS)).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            dtend = (dt + timedelta(seconds=+TIME_SPAN_SECONDS)).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            verticalogpredicates = "time from %s to %s" % (dtspanbegin, dtspanend)
             sql = """select *
                   from vertica_log 
                   where time >= ? and time <= ?
                   order by time desc;
                   """
-            logger.debug("parameters=(%s, %s), sql=%s" %(dtbegin, dtend, sql))
-            verticalogs = db.execute(sql, (dtbegin, dtend)).fetchall()
-            predicates = "time from %s to %s" % (dtbegin, dtend)
+            logger.debug("parameters=(%s, %s), sql=%s" %(dtspanbegin, dtspanend, sql))
+            db.execute(sql, (dtspanbegin, dtspanend))
         else:
             # get verticalogs by transaction_id, and time span for better performance
+            verticalogpredicates = "transaction_id = %s" % transaction_id
             sql = """select *
                   from vertica_log 
                   where time >= ? and time <= ?
                       and transaction_id = ?
                   order by time desc;"""
             logger.debug("parameters=(%s, %s, %s), sql=%s" %(dtbegin, dtend, transaction_id, sql))
-            verticalogs = db.execute(sql, (dtbegin, dtend, transaction_id,)).fetchall()
-            predicates = "transaction_id = %s" % transaction_id
+            db.execute(sql, (dtbegin, dtend, transaction_id,))
+
+        try :
+            verticalogcolumns = [c for (c, _, ) in db.getdescription()]
+            verticalogs = db.fetchall()
+        except :
+            verticalogcolumns = None
+            verticalogs = None
 
         # get issue reasons acording issue_reason
         reasons = []
@@ -196,18 +245,30 @@ def errordetail(db):
                               where %s match ? %s
                               order by time desc; """ % (tmptable, tmptable.split('.')[1], filterexpression)
                         logger.debug("parameters=(%s), sql=%s" %(reason_pattern, sql))
-                        reasons.append([ \
-                            reason_name, \
-                            action, \
-                            db.execute(sql, (reason_pattern, )).fetchall()
-                            ])
+                        db.execute(sql, (reason_pattern, ))
+                        try :
+                            reasoncolumns = [c for (c, _, ) in db.getdescription()]
+                            reason = db.fetchall()
+                        except :
+                            reasoncolumns = None
+                            reason = None
+
+                        if not reasoncolumns is None :
+                            reasons.append([ \
+                                reason_name, \
+                                action, \
+                                reasoncolumns, \
+                                reason
+                                ])
                     # clear temp table
                     sql = """drop table if exists %s;""" % tmptable
                     logger.debug("sql=%s" %sql)
                     db.execute(sql)
     
 
-        return template("errnav/errordetail", verticalogs=verticalogs, reasons=reasons, predicates=predicates)
+        return template("errnav/errordetail", reasons=reasons, \
+            messagespredicates=messagespredicates, messagescolumns=messagescolumns, messages=messages, \
+            verticalogpredicates=verticalogpredicates, verticalogcolumns=verticalogcolumns, verticalogs=verticalogs)
     except Exception, e:
         msg = "Failed when get error detail!"
         return HTTPError(body=msg, exception=e, traceback=traceback.format_exc())
