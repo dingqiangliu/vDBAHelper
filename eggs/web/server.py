@@ -8,7 +8,8 @@
 import os
 from logging.config import fileConfig
 # set up the logger
-fileConfig(os.path.realpath(os.path.dirname(os.path.realpath(__file__)) + "/../../etc/logging.ini"))
+vDBAHome = os.path.realpath(os.path.dirname(os.path.realpath(__file__)) + "/../..")
+fileConfig("%s/etc/logging.ini" % vDBAHome, defaults={"logdir": "%s/logs" % vDBAHome})
 
 import sys
 import traceback

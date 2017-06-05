@@ -96,6 +96,5 @@ etc/cookies
 etc/globhist
 etc/gotohist
 etc/searchhist
-logs/
 .vscode/
 

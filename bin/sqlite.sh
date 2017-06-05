@@ -21,10 +21,16 @@ if [ "$(${PYTHON} -c 'import sys; print sys.version_info >= (2,7)')" != "True" ]
   echo "python 2.7+ is required!"
   exit 1
 fi
-#apsw.so need it
-if [ -f /usr/lib*/libpython*.so.1.0 ] ; then
-  [ -f lib/libpython2.6.so.1.0 ] || ln -s /usr/lib*/libpython*.so.1.0 "${vDBAHome}/lib/libpython2.6.so.1.0"
-  if [ ! $? ] ; then
+
+#apsw.so need it libpython2.6.so.1.0
+if [ "$(uname)" == "Linux" -a ! -f "${vDBAHome}/lib/libpython2.6.so.1.0" ] ; then
+  for d in /usr/lib64 /usr/lib64 ; do
+    if [ -f ${d}/libpython*.so.1.0 ] ; then
+      ln -s ${d}/libpython*.so.1.0 "${vDBAHome}/lib/libpython2.6.so.1.0"
+			break
+    fi
+	done
+  if [ ! -f "${vDBAHome}/lib/libpython2.6.so.1.0" ] ; then
     echo "libpython*.so.1.0 is not found!"
     exit 1
   fi
@@ -71,7 +77,7 @@ pscript=$(cat <<-EOF
 	import os
 	from logging.config import fileConfig
 	# set up the logger
-	fileConfig(os.path.realpath("${vDBAHome}/etc/logging.ini"))
+	fileConfig("${vDBAHome}/etc/logging.ini", defaults={"logdir": "%s/logs" % "${vDBAHome}"})
 
 	import apsw
 	import sys
