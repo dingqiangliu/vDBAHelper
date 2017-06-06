@@ -57,4 +57,9 @@ insert into issue_category values('killed_by_oom', 'killed by OOM', 0, 'messages
 insert into issue_reason values('killed_by_oom_invoke', 'vertica process invoked out of memory killer', 'killed by OOM', 0, 'messages', 'time', 'message:vertica invoked oom killer', '1. check glibc version, if it is 2.12, it should have a .149 or later suffix. 2. do not run other application on vertica nodes. 3. check your catalog size, if it is over 5% of your memory and your vertica version is under 8.x, please decrease maxmemorysize of your general resource pool.');
 insert into issue_reason values('killed_by_oom_killed', 'vertica process was killed' , 'killed by OOM', 1, 'messages', 'time', 'message:Killed process vertica', null);
 
+-- rule: Low disk space detected
+insert into log_message_level values('WARNING', 'vertica_log', ' thread_name=''LowDiskSpaceCheck'' and message like ''%Low disk space detected%'' ');
+insert into issue_category values('lowdiskspacedetected', 'Low disk space', 0, 'vertica_log', 'Low disk space detected');
+insert into issue_reason values('lowdiskspacedetected', 'Low disk space detected', 'Low disk space', 0, 'vertica_log', 'time', 'message:Low disk space detected', 'check disk usage, remove unsed data, or add more disks.');
+
 -- commit;
