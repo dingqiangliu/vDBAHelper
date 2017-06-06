@@ -36,6 +36,11 @@ if [ "$(uname)" == "Linux" -a ! -f "${vDBAHome}/lib/libpython2.6.so.1.0" ] ; the
   fi
 fi
 
+etcDir="${vDBAHome}/etc"
+mkdir -p "${etcDir}"
+logsDir="${vDBAHome}/logs"
+mkdir -p "${logsDir}"
+
 vDbName=""
 vMetaFile="/opt/vertica/config/admintools.conf"
 vAdminOSUser="dbadmin"
@@ -77,7 +82,7 @@ pscript=$(cat <<-EOF
 	import os
 	from logging.config import fileConfig
 	# set up the logger
-	fileConfig("${vDBAHome}/etc/logging.ini", defaults={"logdir": "%s/logs" % "${vDBAHome}"})
+	fileConfig("${vDBAHome}/etc/logging.ini", defaults={"logdir": "${logsDir}"})
 
 	import apsw
 	import sys
