@@ -4,7 +4,10 @@
 # Description: SQLite virtual table vertica_log for vertica.log files on each nodes
 # Author: DingQiang Liu
 
+import re
+
 import db.vcluster as vcluster
+from util.threadlocal import threadlocal_get
 import db.verticalog_filterdata as verticalog_filterdata
 
 
@@ -62,6 +65,7 @@ def create(vs):
     
     cursor.execute("create virtual table %s using verticasource" % (tableName if schemaname == "" else schemaname+"."+tableName))
     vs.tables[tableName].remotefiltermodule = verticalog_filterdata
+    vs.tables[tableName].getfilter = getfilter
 
     columns = [ columnName.lower() for _, columnName, _, _, _, _ in cursor.execute("pragma table_info('%s');" % tableName) ]
     columns.insert(0, u"rowid")
@@ -74,3 +78,30 @@ def create(vs):
   finally :
     if not cursor is None :
       cursor.close();
+
+
+def getfilter() :
+  """
+  dynamic generate keywords list from current SQL in threadlocal
+  """
+
+  keywords = None
+  sql = threadlocal_get("CURRENTSQL")
+  if sql :
+    keywords = []
+    KEYWORDSPATTERN = re.compile("level\s+in\s+\(([^\)]+)\)|message\s+like\s*'([^']+)'|message\s*=\s*'([^']+)'", re.IGNORECASE + re.MULTILINE)
+    LEVELVALUEPATTERN = re.compile("'([^']+)'")
+
+    for m in KEYWORDSPATTERN.findall(sql) :
+      if len(m[0]) > 0 :
+        for w in LEVELVALUEPATTERN.findall(m[0]) :
+          keywords.append(w)
+      for w in m[1:] :
+        if len(w) > 0 :
+          if w.startswith("%") :
+            w = w[1:]
+          if w.endswith("%") :
+            w = w[:-1]
+          keywords.append(w)
+
+  return keywords

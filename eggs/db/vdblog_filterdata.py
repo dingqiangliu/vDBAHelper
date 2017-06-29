@@ -327,7 +327,9 @@ def parseFile(f, args):
                 else:
                     # 946684800 is secondes between '1970-01-01 00:00:00'(Python) and '2000-01-01 00:00:00'(Vertica)
                     row[0] = datetime.fromtimestamp(float(ltime)/1000000+946684800).strftime("%Y-%m-%d %H:%M:%S")
-                message = row[idxMessage]
+                # remove '\000' to avoid misleading vsourceparser written by C language.
+                message = row[idxMessage].replace("\000", "")
+                row[idxMessage] = message
                 # rowid = vertica_time % 9999999999999 * 1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)
                 row.insert(0, str(ltime % 9999999999999 * 1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)) )
                 # node_name

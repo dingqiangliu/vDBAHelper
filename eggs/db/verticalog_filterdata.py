@@ -8,6 +8,9 @@
 import re
 from datetime import datetime
 import os, sys
+from multiprocessing import cpu_count
+from multiprocessing import Pool
+from functools import partial
 
 
 COLUMNS = ["time", "thread_name", "thread_id", "transaction_id", "component", "level", "elevel", "enode", "message"]
@@ -236,6 +239,42 @@ class LogFile:
                 if (i == 0) and (lRowEnd >= 0) :
                     part = "\n".join( lines[0:lRowEnd+1] )
 
+    def nextLineWithFilter(self, keywords, pfrom=None, pto=None, anchor=None):
+        """
+        get next line from front end with keywords filter.
+    
+        args : 
+        * keywords: keywords list to filter lines
+        * pfrom: low bound of character position in file
+        * pto: upper bound of character position in file
+        * anchor: anchor position for line. It will be move to begin of current/next row if it's not, 
+    
+        return : 
+        * line: line match with sum of filters.
+        """
+        
+        match = None
+        part = ""
+        for _, block in self.__readblocks(True, pfrom, pto, anchor, 32768):
+            block = part + block
+            part = ""
+
+            lines = block.split("\n")
+
+            for line in lines[:-1] :
+                if any(wd in line for wd in keywords) :
+                    if not ROWPATTERN.search(line) is None :
+                        yield line
+                
+            # keep unfinished part, maybe it's including part of next block.
+            part = lines[-1]
+
+        # out put last matched row.
+        if part != "" :
+            if any(wd in part for wd in keywords) :
+                if not ROWPATTERN.search(part) is None :
+                    yield part
+
 
 def parseFile(f, args):
     predicates = args["predicates"]
@@ -341,10 +380,12 @@ def parseFile(f, args):
                 if not transactionID is None and len(transactionID) > 0:
                     row[idxTransactionID] = str(long(transactionID, 16))
 
-                ltime = long(datetime.strptime(row[idxTime], "%Y-%m-%d %H:%M:%S.%f").strftime('%s%f'))
-                message = row[idxMessage]
-                # rowid = (time -946684800*1000000) % 9999999999999 * 1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)
-                row.insert(0, str((ltime-946684800*1000000)%9999999999999*1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)) )
+                time = row[idxTime]
+                # remove '\000' to avoid misleading vsourceparser written by C language.
+                message = row[idxMessage].replace("\000", "")
+                row[idxMessage] = message
+                # rowid = abs(hash(time)) % 9999999999999 * 1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)
+                row.insert(0, str(abs(hash(time))%9999999999999*1000000 + nodenum * 1000 + abs(hash(message)) % (10 ** 3)) )
                 # node_name
                 row.insert(2, nodeName)
                 data.append('\1'.join(row))
@@ -360,6 +401,44 @@ def parseFile(f, args):
         return '\2'.join(data)
     else :
         return None
+
+
+def filterFilePortion(positions, filename, keywords):
+    with open(filename) as fo :
+        fin = LogFile(fo)
+        posFrom = positions[0] if not positions is None and len(positions)>=1  else None
+        posTo = positions[1] if not positions is None and len(positions)>=2  else None
+        return [line for line in fin.nextLineWithFilter(keywords, posFrom, posTo)]
+
+
+def parseFileWithFilter(filename, args):
+    keywords = args.get("keywords", None)
+    if keywords :
+        # pre filter log file with key words
+        tmpfilename = filename + ".tmp"
+        try :
+            parallelism = cpu_count()
+            filesize = os.path.getsize(filename)
+            chunksize = filesize / parallelism
+
+            # TODO: PicklingError: Can't pickle <type 'function'>: attribute lookup __builtin__.function failed
+            #     see: https://mail.python.org/pipermail/execnet-dev/2011-March/000124.html
+            #pool = Pool(parallelism)
+            #linesList = pool.imap(partial(filterFilePortion, filename=filename, keywords=keywords) \
+            #    , ([n * chunksize, (filesize if (n == parallelism - 1) else (n+1) * chunksize)] for n in range(parallelism)) \
+            #    )
+            linesList = [filterFilePortion([], filename=filename, keywords=keywords)]
+
+            with open(tmpfilename, "w") as tmpfile :
+                tmpfile.writelines(l+"\n" for ll in linesList for l in ll)
+                lines = [l+"\n" for ll in linesList for l in ll]
+            
+            return parseFile(tmpfilename, args)
+        finally :
+            # TODO: os.remove(tmpfilename)
+            pass
+    else :
+        return parseFile(filename, args)
 
 
 if __name__ == '__channelexec__' :
@@ -379,10 +458,8 @@ if __name__ == '__channelexec__' :
 
     if not 1 in predicates or all([eval("nodeName %s val" % operators[op]) for op, val in predicates[1]]) :
         path = '%s/%s_catalog/' % (catalogpath, nodeName)
-        data = [ parseFile(path + "/vertica.log", args) ]
-        data = [x for x in data if x is not None] # ignore empty file
-  
+        data = [ parseFileWithFilter(path + "vertica.log", args) ]
         if not channel.isclosed() and len(data) > 0 :
-            channel.send('\2'.join(data))
+            channel.send('\2'.join(r for r in data if r is not None))
             data = []
 

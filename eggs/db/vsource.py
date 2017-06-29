@@ -23,6 +23,7 @@ import db.vdatacollectors as vdatacollectors
 import db.verticalog as verticalog
 import db.vdblog as vdblog
 import db.messages as messages
+import db.vsourceparser as vsourceparser
 
 
 logger = logging.getLogger(__name__)
@@ -49,16 +50,6 @@ def setup(connection):
   """
 
   VerticaSource(connection);
-
-
-def splitListGroups(alist, n):
-  """ split list to n groups """
-  d, m = divmod(len(alist), n)
-  if d == 0 :
-    n = m
-  it = iter(alist)
-  for i in range(n):
-    yield list(islice(it, d+(i<m)))
 
 
 # module for vertica sources
@@ -117,8 +108,7 @@ class VerticaSource:
 
     while not self.stopSyncJobEvent.is_set() :
       for tablename in synctables :
-        # active sync job after at least 5 seconds of last sqlite activity
-        #time.sleep(1)
+        # active sync job after at least N seconds of last sqlite activity
         while time.time() - getLastSQLiteActivityTime() < 3*60 :
           time.sleep(10)
 
@@ -127,10 +117,13 @@ class VerticaSource:
           tbegin = time.time()
 
           # create real SQLite table. Actually we copy DDL of origional table and add PRIMARY KEY/WITHOUT ROWID for efficent storage and performance
-          tables = [ t for (t) in cursor.execute("select tbl_name from sqlite_master where lower(tbl_name)  = ?", (tablename, )) ]
+          sql = "select tbl_name from sqlite_master where lower(tbl_name)  = ?"
+          logger.debug("sql=%s, parameters=%s" % (sql, tablename))
+          tables = [ t for (t) in cursor.execute(sql, (tablename, )) ]
           primaryKeys = self.tables[tablename].primaryKeys
           if len(tables) == 0 :
             sql = "drop table if exists %s" % tablename+"_tmp" 
+            logger.debug("sql=%s" % sql)
             cursor.execute(sql)
             
             if tablename in self.ddls4local :
@@ -141,34 +134,45 @@ class VerticaSource:
                 sql = self.ddls[tablename].replace(tablename, tablename+"_tmp").replace(");",",PRIMARY KEY(%s)) WITHOUT ROWID;" % ",".join(self.tables[tablename].primaryKeys))
               else :
                 sql = self.ddls[tablename].replace(tablename, tablename+"_tmp")
+            logger.debug("sql=%s" % sql)
             cursor.execute(sql)
             
             sql = "insert into %s select * from %s" % (tablename+"_tmp", tablename)
+            logger.debug("sql=%s" % sql)
             cursor.execute(sql)
             sql = "alter table %s rename to %s" % (tablename+"_tmp", tablename)
+            logger.debug("sql=%s" % sql)
             cursor.execute(sql)
           else :
             # filter on time on virtual table into temp table, for better performance
             sql = "select count(1) from main.%s" % tablename
+            logger.debug("sql=%s" % sql)
             for (rowcount,) in cursor.execute(sql) : break
             if rowcount <= 0 :
               sql = "insert into main.%s select * from v_internal.%s" % (tablename, tablename)
+              logger.debug("sql=%s" % sql)
               cursor.execute(sql)
             else:
               sql = "drop table if exists __tmpdc"
+              logger.debug("sql=%s" % sql)
               cursor.execute(sql)
               sql = "create temp table __tmpdc as select * from v_internal.%s where time > (select min(time) from (select max(time) time from main.%s group by node_name))" % (tablename, tablename)
+              logger.debug("sql=%s" % sql)
               cursor.execute(sql)
               if (not primaryKeys is None) and (len(primaryKeys) > 0) :
                 sql = "insert into main.%s select * from __tmpdc where (%s) not in (select %s from main.%s)" % (tablename, ",".join(self.tables[tablename].primaryKeys), ",".join(self.tables[tablename].primaryKeys), tablename)
+                logger.debug("sql=%s" % sql)
                 cursor.execute(sql)
               else :
                 sql = "delete from main.%s where time in (select time from __tmpdc)" % tablename 
+                logger.debug("sql=%s" % sql)
                 cursor.execute(sql)
                 sql = "insert into main.%s select * from __tmpdc" % tablename
+                logger.debug("sql=%s" % sql)
                 cursor.execute(sql)
 
               sql = "drop table if exists __tmpdc"
+              logger.debug("sql=%s" % sql)
               cursor.execute(sql)
 
             # TODO: rotate tablesize
@@ -179,6 +183,9 @@ class VerticaSource:
           msg = str(e)
           if not "InterruptError:" in msg :
             logger.exception("sync data for table [%s] from Vertica because [%s]. SQL = [%s]" % (tablename, msg, sql))
+      
+      # wait N seconds for next sync loop
+      setLastSQLiteActivityTime(time.time())
 
 
   def Create(self, db, modulename, dbname, tablename, *args):
@@ -189,6 +196,7 @@ class VerticaSource:
   Connect=Create
   
   def exectracer(self, cursor, sql, bindings):
+    # TODO: it seems this tracer will not be called by shell
     if not cursor is self.syncJobCursor :
       # ignore background sync job
 	    # tell background sync job it's busy now.
@@ -206,6 +214,7 @@ class Table:
     self.columns = []
     self.columnTypes = {}
     # Note: followings will be set in *.create function just after "create virtual table TABLENAME using verticasource":
+    #   self.getfilter
     #   self.remotefiltermodule
     #   self.columns
     #   self.columnTypes
@@ -264,6 +273,35 @@ class Cursor:
     self.pos=0
 
 
+  def Eof(self):
+    return self.pos>=len(self.data)
+
+  def Rowid(self):
+    return self.data[self.pos][0]
+
+  def Column(self, col):
+    if (col == 0) : logger.debug( "[COLUMN] tablename=%s, cursor=%s, pos=%s" % (self.table.tablename, self, self.pos))
+
+    try :
+      value = self.data[self.pos][1+col]
+      if isinstance(value, str) :
+        # TODO: It's better to push it to parser, but vsourceparser is not good at generating unicode string. Return unicode for Chinese or other non-ascii characters from utf-8. 
+        return unicode(value, "utf-8", "replace")
+      else :
+        return value
+    except Exception, e:
+      columnname = self.table.columns[1+col] if (1+col < len(self.table.columns)) else col
+      msg = "[%s] when get value of column [%s] on table %s[%s, %s]" % (str(e), columnname, self.table.tablename,self.pos, 1+col)
+      logger.error(msg)
+      raise StandardError(msg)
+
+  def Next(self):
+    self.pos+=1
+
+  def Close(self):
+    self.data = None
+
+
   def Filter(self, indexnum, indexname, constraintargs):
     # get data 
     self.data = []
@@ -295,10 +333,16 @@ class Cursor:
         predCol.append([op, val])
         predicates[col] = predCol
 
-    logger.debug("[FILTER] tablename=%s, cursor=%s, pos=%s, indexnum=%s, indexname=%s, constraintargs=%s, predicates=%s, remotefiltermodule=%s" % (self.table.tablename, self, self.pos, indexnum, indexname, constraintargs, predicates, self.table.remotefiltermodule.__name__))
+    # get dynamic filter
+    keywords = None
+    getfilter = getattr(self.table, "getfilter", None)
+    if getfilter :
+      keywords = getfilter()
+
+    logger.debug("[FILTER] tablename=%s, cursor=%s, pos=%s, indexnum=%s, indexname=%s, constraintargs=%s, predicates=%s, keywords=%s, remotefiltermodule=%s" % (self.table.tablename, self, self.pos, indexnum, indexname, constraintargs, predicates, keywords, self.table.remotefiltermodule.__name__))
     # call remote function
     mch = vc.executors.remote_exec(self.table.remotefiltermodule)
-    mch.send_each({"catalogpath":vc.catPath, "tablename":self.table.tablename, "columns":columns, "predicates":predicates})
+    mch.send_each({"catalogpath":vc.catPath, "tablename":self.table.tablename, "columns":columns, "predicates":predicates, "keywords":keywords})
 
     q = mch.make_receive_queue(endmarker=None)
     terminated = 0
@@ -310,87 +354,33 @@ class Cursor:
           break
         continue
       else: 
-        # TODO: why multiple threads parsing not benifit for performance? Where is the bottleneck?
-        logger.debug("[FILTER] rows=%s" % rows)
-        self.data.extend(self.parseRows(rows, columns))
-        #self.data.extend(self.parseRowsParallel(rows, columns))
-        #self.data.extend(self.parseRowsParallel2(rows, columns))
-    
-  def parseRowsParallel2(self, rows, columns):
-    # multiple thread parsing for better performance
-    pool = ThreadPool()
-    rowsGroups = pool.map( partial(self.parseRows2, columns=columns) , [i for i in splitListGroups(rows.split('\2'), pool._processes)] )
-    pool.close()
-    pool.join()
-    
-    dataRows = []
-    for g in rowsGroups :
-      dataRows.extend(g) 
-    return dataRows
+        logger.debug("[FILTER] rows size=%s" % len(rows))
+        try :
+          columnTypes = [self.table.columnTypes[c] for c in columns]
+          
+          # use C extension module for better performance. Note: vsourceparser.parseRows can not accept unicode string at now.
+          tuples = vsourceparser.parseRows(rows, columnTypes)
+          #tuples = parseRows(rows, columnTypes)
 
-  def parseRows2(self, rows, columns):
-    dataRows = []
-    for line in rows:
-      try :
-        # ignore broken line
-        colValues = line.split('\1')
-        if len(colValues) == len(columns) :
-          dataRows.append( [ parseValue(self.table.columnTypes[columns[i]], cv) for i, cv in enumerate(colValues) ] )
-      except Exception, e:
-        raise StandardError("[%s] when parseRows [%s] of column [%s] on table [%s]" % (str(e), cv, self.table.columns[i], self.table.tablename))
-    return dataRows
+          self.data.extend(tuples)
+        except Exception, e:
+          raise StandardError("[%s] on table [%s]" % (str(e), self.table.tablename))
 
-  def parseRowsParallel(self, rows, columns):
-    # multiple thread parsing for better performance
-    pool = ThreadPool()
-    dataRows = pool.map( partial(self.parseLine, columns=columns) , [ line for line in rows.split('\2') ] )
-    pool.close()
-    pool.join()
-    return [x for x in dataRows if x is not None] # ignore broken line 
-
-  def parseRows(self, rows, columns):
-    dataRows = []
-    for line in rows.split('\2'):
-      try :
-        # ignore broken line
-        colValues = line.split('\1')
-        if len(colValues) == len(columns) :
-          dataRows.append( [ parseValue(self.table.columnTypes[columns[i]], cv) for i, cv in enumerate(colValues) ] )
-      except Exception, e:
-        raise StandardError("[%s] when parseRows [%s] of column [%s] on table [%s]" % (str(e), cv, self.table.columns[i], self.table.tablename))
-    return dataRows
-
-  def parseLine(self, line, columns):
+# Note: please sync vsourceparser/vsourceparser.c with following function
+def parseRows(rows, columnTypes):
+  dataRows = []
+  for line in rows.split('\2'):
     try :
+      # ignore broken line
       colValues = line.split('\1')
-      if len(colValues) == len(columns) :
-        return [ parseValue(self.table.columnTypes[columns[i]], cv) for i, cv in enumerate(colValues) ]
-      else :
-        return None
+      if len(colValues) == len(columnTypes) :
+        dataRows.append( [ parseValue(columnTypes[i], cv) for i, cv in enumerate(colValues) ] )
     except Exception, e:
-      raise StandardError("[%s] when parseLine [%s] of column [%s] on table [%s]" % (str(e), cv, self.table.columns[i], self.table.tablename))
-
-  def Eof(self):
-    return self.pos>=len(self.data)
-
-  def Rowid(self):
-    return self.data[self.pos][0]
-
-  def Column(self, col):
-    if (col == 0) : logger.debug( "[COLUMN] tablename=%s, cursor=%s, pos=%s" % (self.table.tablename, self, self.pos))
-
-    try :
-      return self.data[self.pos][1+col]
-    except Exception, e:
-      raise StandardError("[%s] when get value [%s] of column [%s] on table [%s]" % (str(e), self.data[self.pos][1+col], self.table.columns[1+col], self.table.tablename))
-
-  def Next(self):
-    self.pos+=1
-
-  def Close(self):
-    self.data = None
+      raise StandardError("[%s] when parseRows [%s] of column [%s]" % (str(e), cv, i))
+  return dataRows
 
 
+# Note: please sync vsourceparser/vsourceparser.c with following function
 def parseValue(sqltype, value):
   # Till now, Vertica datacollector tables only use types: BOOLEAN, FLOAT, INTEGER, TIMESTAMP WITH TIME ZONE, VARCHAR
   if (len(value) == 0) and not sqltype in ('varchar', 'char') :
@@ -404,10 +394,11 @@ def parseValue(sqltype, value):
         return lValue
       else :
         return struct.unpack('l', struct.pack('L', lValue))[0] 
-    elif sqltype in ('double', 'float', 'real') :
+    elif sqltype in ('double', 'float', 'real', 'decimal', 'numeric') :
       return float(value)
     elif sqltype in ('date', 'datetime', 'timestamp') :
       try:
+        # convert Vertica inner datetime to string, eg: 544452155737558 should be '2017-04-02 20:42:35.737558'
         # long format
         lValue = long(value)
         # -9223372036854775808(-0x8000000000000000) means null in Vertica
@@ -420,15 +411,10 @@ def parseValue(sqltype, value):
         return value
     elif sqltype == 'boolean' :
         return 'true' == value.lower()
-    elif sqltype in ('decimal', 'numeric', 'boolean') :
-      return Decimal(value)
-    elif sqltype == 'blob' :
-      return buffer(value)
     else :
-      # others are str. 
-      # process escpe character in string, eg. '\n'
-      # return unicode for Chinese or other non-english characters. 
-      return unicode(value.decode('string_escape'), "utf-8")
+      # TODO: others are str. It's better to push it to parser, but vsourceparser is not good at generating unicode string. Return unicode for Chinese or other non-ascii characters from utf-8. 
+      #return unicode(value, "utf-8", "replace")
+      return value
   except :
     # ignore incorrect value format
     return None

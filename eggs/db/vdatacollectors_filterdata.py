@@ -41,7 +41,8 @@ def prevRow(lines, recBegin, nFrom=None, nTo=None):
             lparts = line.split(":")
             columnName = lparts[0]
             columnValue = ":".join(lparts[1:]) if len(lparts) > 0 else ""
-            row.insert(0, columnValue)
+            #process escpe character in string, eg. show new line for '\n' in dc_optimizer_stats.voptions 
+            row.insert(0, columnValue.decode('string_escape'))
 
 def nextRow(lines, recBegin, nFrom=None, nTo=None):
     """
@@ -73,7 +74,8 @@ def nextRow(lines, recBegin, nFrom=None, nTo=None):
             lparts = line.split(":")
             columnName = lparts[0]
             columnValue = ":".join(lparts[1:]) if len(lparts) > 0 else ""
-            row.append(columnValue)
+            #process escpe character in string, eg. show new line for '\n' in dc_optimizer_stats.voptions 
+            row.append(columnValue.decode('string_escape'))
 
 
 def parseFile(f, args):

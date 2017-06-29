@@ -13,6 +13,8 @@ from random import randint
 
 from bottle import route, post, error, static_file, template, request, response, HTTPError
 
+from util.threadlocal import threadlocal_set, threadlocal_del
+
 logger = logging.getLogger(__name__)
 
 
@@ -86,7 +88,9 @@ def errorlist(db):
                     where time >= ? and time <= ? ) t0
                 %s ;""" % (tmptable, messagetable, levelexpression, cloumn_transactionid, messagetable, levelfilter)
             logger.debug("parameters=(%s, %s), sql=%s" %(dtbegin, dtend, sql))
+            threadlocal_set("CURRENTSQL", sql)
             db.execute(sql, (dtbegin, dtend,))
+            threadlocal_del("CURRENTSQL")
 
             # caculate category by pattern, set category by delete+insert 
             sql = """drop table if exists %s_1;""" % tmptable

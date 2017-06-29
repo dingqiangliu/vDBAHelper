@@ -11,6 +11,7 @@ import re
 
 import apsw
 
+from util.threadlocal import threadlocal_set, threadlocal_del
 from testdb.dbtestcase import DBTestCase
 
 
@@ -84,7 +85,7 @@ class TestVerticaLog(DBTestCase):
       self.fail(traceback.format_exc().decode(sys.stdout.encoding))
     finally :
       if not cursor is None :
-        cursor.close();
+        cursor.close()
 
 
   def testVerticaLog(self):
@@ -98,12 +99,52 @@ class TestVerticaLog(DBTestCase):
       for r in cursor.execute("select * from %s limit 1" % tablename): pass
     except :
       self.fail("[%s] when query on table [%s]" % (traceback.format_exc(), tablename))
-
-      # fix for: UnicodeDecodeError: 'ascii' codec can't decode byte 0xe6 in position 0: ordinal not in range(128)
-      #self.fail("[%s] when query on table [%s]" % (traceback.format_exc().decode(sys.stdout.encoding), tablename)) 
     finally :
       if not cursor is None :
-        cursor.close();
+        cursor.close()
+
+
+  def testVerticaLogFilterByKeywords(self):
+    """testing table vertica_log """
+    
+    cursor = None 
+    try :
+      cursor = self.connection.cursor()
+
+      sql = """
+SELECT TIME,
+       LEVEL,
+       transaction_id,
+       message,
+       'Unkown' cat_name,
+                'vertica_log' TABLE_NAME
+FROM
+  ( SELECT TIME, (CASE
+                      WHEN thread_name='SafetyShutdown'
+                           AND message='Shutting down this node' THEN 'FATAL'
+                      WHEN thread_name='Spread Client'
+                           AND message LIKE 'Cluster partitioned%' THEN 'FATAL'
+                      WHEN thread_name='LowDiskSpaceCheck'
+                           AND message LIKE '%Low disk space detected%' THEN 'WARNING'
+                      ELSE LEVEL
+                  END) LEVEL,
+                       transaction_id transaction_id,
+                       message
+   FROM vertica_log log) t0
+WHERE LEVEL IN ('FATAL',
+                'ERROR')
+LIMIT 1;
+      """
+      threadlocal_set("CURRENTSQL", sql)
+
+      for r in cursor.execute(sql): pass
+    except :
+      self.fail("[%s] when query on table [%s]" % (traceback.format_exc(), sql))
+    finally :
+      threadlocal_del("CURRENTSQL")
+      if not cursor is None :
+        cursor.close()
+
 
 if __name__ == "__main__":
   unittest.main()

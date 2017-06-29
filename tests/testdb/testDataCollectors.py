@@ -148,6 +148,7 @@ class TestDataCollectors(DBTestCase):
         select tbl_name from sqlite_master
         where lower(tbl_name) like 'dc__%' 
           and not lower(tbl_name) in ('dc_storage_layer_statistics', 'dc_requests_completed', 'dc_lock_attempts')
+        order by 1
         """
       tables = [ t for (t) in cursor.execute(sql) ]
       for tablename in tables :
