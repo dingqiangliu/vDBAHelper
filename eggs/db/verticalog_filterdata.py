@@ -258,7 +258,6 @@ class LogFile:
         for _, block in self.__readblocks(True, pfrom, pto, anchor, 32768):
             block = part + block
             part = ""
-
             lines = block.split("\n")
 
             for line in lines[:-1] :
@@ -414,6 +413,9 @@ def filterFilePortion(positions, filename, keywords):
 def parseFileWithFilter(filename, args):
     keywords = args.get("keywords", None)
     if keywords :
+        # Note: keywords can not be unicode when "in" match with utf8 string, otherwise "in" will meet issue "UnicodeDecodeError: 'ascii' codec can't decode byte 0x... : ordinal not in range(128)" 
+        keywords = [wd.encode("utf-8") for wd in keywords]
+
         # pre filter log file with key words
         tmpfilename = filename + ".tmp"
         try :
@@ -421,27 +423,24 @@ def parseFileWithFilter(filename, args):
             filesize = os.path.getsize(filename)
             chunksize = filesize / parallelism
 
-            # TODO: PicklingError: Can't pickle <type 'function'>: attribute lookup __builtin__.function failed
-            #     see: https://mail.python.org/pipermail/execnet-dev/2011-March/000124.html
-            #pool = Pool(parallelism)
-            #linesList = pool.imap(partial(filterFilePortion, filename=filename, keywords=keywords) \
-            #    , ([n * chunksize, (filesize if (n == parallelism - 1) else (n+1) * chunksize)] for n in range(parallelism)) \
-            #    )
-            linesList = [filterFilePortion([], filename=filename, keywords=keywords)]
+            pool = Pool(parallelism)
+            linesList = pool.imap(partial(filterFilePortion, filename=filename, keywords=keywords) \
+                , ([n * chunksize, (filesize if (n == parallelism - 1) else (n+1) * chunksize)] for n in range(parallelism)) \
+                )
+            pool.close()
+            pool.join()
 
             with open(tmpfilename, "w") as tmpfile :
                 tmpfile.writelines(l+"\n" for ll in linesList for l in ll)
-                lines = [l+"\n" for ll in linesList for l in ll]
             
             return parseFile(tmpfilename, args)
         finally :
-            # TODO: os.remove(tmpfilename)
-            pass
+            os.remove(tmpfilename)
     else :
         return parseFile(filename, args)
 
 
-if __name__ == '__channelexec__' :
+if __name__ == '__channelexec__' or __name__ == '__main__' :
     # ignore stderr message when 'non-unicode character' == u'...' : UnicodeWarning: Unicode equal comparison failed to convert both arguments to Unicode - interpreting them as being unequal
     sys.stderr = open(os.devnull, 'w')
 

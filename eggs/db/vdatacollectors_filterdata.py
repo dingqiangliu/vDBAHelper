@@ -186,7 +186,7 @@ def parseFile(f, args):
         return None
 
 
-if __name__ == '__channelexec__' :
+if __name__ == '__channelexec__' or __name__ == '__main__' :
     # ignore stderr message when 'non-unicode character' == u'...' : UnicodeWarning: Unicode equal comparison failed to convert both arguments to Unicode - interpreting them as being unequal
     sys.stderr = open(os.devnull, 'w')
 

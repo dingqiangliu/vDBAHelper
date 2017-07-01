@@ -1063,7 +1063,12 @@ class SlaveGateway(BaseGateway):
                         name = name.encode('ascii')
                     newkwargs[name] = value
                 kwargs = newkwargs
-            loc = {'channel': channel, '__name__': '__channelexec__'}
+
+            # TODO: Note: avoid change __name__ to cause error "PicklingError: Can't pickle <type 'function'>: attribute lookup __builtin__.function failed" when remotely running multiple process 
+            #loc = {'channel': channel, '__name__': '__channelexec__'}
+            loc = globals()
+            loc.update({"channel": channel})
+
             self._trace("execution starts[%s]: %s" %
                         (channel.id, repr(source)[:50]))
             channel._executing = True

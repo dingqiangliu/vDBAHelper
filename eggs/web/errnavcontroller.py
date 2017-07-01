@@ -195,8 +195,8 @@ def errordetail(db):
                   where time >= ? and time <= ?
                       and transaction_id = ?
                   order by time desc;"""
-            logger.debug("parameters=(%s, %s, %s), sql=%s" %(dtbegin, dtend, transaction_id, sql))
-            db.execute(sql, (dtbegin, dtend, transaction_id,))
+            logger.debug("parameters=(%s, %s, %s), sql=%s" %(dtspanbegin, dtspanend, transaction_id, sql))
+            db.execute(sql, (dtspanbegin, dtspanend, transaction_id,))
 
         try :
             verticalogcolumns = [c for (c, _, ) in db.getdescription()]
@@ -235,8 +235,8 @@ def errordetail(db):
                           select * 
                           from %s
                           where time >= ? and time <= ? ;""" % (tmptable, tablename)
-                    logger.debug("parameters=(%s, %s), sql=%s" %(dtbegin, dtend, sql))
-                    db.execute(sql, (dtbegin, dtend))
+                    logger.debug("parameters=(%s, %s), sql=%s" %(dtspanbegin, dtspanend, sql))
+                    db.execute(sql, (dtspanbegin, dtspanend))
                     # filter by rules
                     for rule in rules:
                         reason_name, filter_columns, reason_pattern, action = rule[0], rule[1], rule[2], rule[3]
