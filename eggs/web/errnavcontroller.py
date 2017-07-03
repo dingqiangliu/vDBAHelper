@@ -76,7 +76,7 @@ def errorlist(db):
                 levelexpression = "%s level" % cloumn_level
 
             # caculate level filter according selecting
-            levelvalues = ("'" + "','".join(msgtype) + "'") if (len(msgtype) > 0 and not 'ALL' in msgtype) else None
+            levelvalues = ("'" + "','".join(msgtype) + "'") if (len(msgtype) > 0) else None
             levelfilter = "where level in (%s)" % levelvalues if not levelvalues is None else ""
 
             # filter messages by time and loglevel
