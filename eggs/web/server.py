@@ -20,6 +20,7 @@ from optparse import OptionParser
 import re
 import time
 import logging
+import traceback, signal
 
 import bottle
 
@@ -130,7 +131,22 @@ class LoggerWriter:
         # to work properly for me.
         self.level(sys.stderr)
 
+def dumpstacks(signal, frame):
+    id2name = dict([(th.ident, th.name) for th in threading.enumerate()])
+    code = []
+    code.append("\n############ Threads stack ############") 
+    for threadId, stack in sys._current_frames().items():
+        code.append("# Thread: %s(%d)" % (id2name.get(threadId,""), threadId))
+        for filename, lineno, name, line in traceback.extract_stack(stack):
+            code.append('%sFile: "%s", line %d, in %s' % (' ' * 2, filename, lineno, name))
+            if line:
+                code.append("  %s" % (line.strip()))
+    print "\n".join(code)
+
 if __name__ == "__main__":
+    # catch 'kill -SIGQUIT' or 'kill -3' for dumping threads stack
+    signal.signal(signal.SIGQUIT, dumpstacks)
+    
     parser = OptionParser()
     parser.add_option("-d", "--database", dest="vDBName", default="", help="Vertica database name, default is the first database in meta file(/opt/vertica/config/admintools.conf)") 
     parser.add_option("-f", "--file", dest="vMetaFile", default="/opt/vertica/config/admintools.conf", help="Vertica database meta file, default is /opt/vertica/config/admintools.conf") 

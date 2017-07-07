@@ -84,6 +84,28 @@ pscript=$(cat <<-EOF
 	# set up the logger
 	fileConfig("${vDBAHome}/etc/logging.ini", defaults={"logdir": "${logsDir}"})
 
+
+	# catch 'kill -SIGQUIT' or 'kill -3' for dumping threads stack
+	import logging
+	import threading, sys, traceback, signal
+
+	logger = logging.getLogger("sqlite")
+
+	def dumpstacks(signal, frame):
+	    id2name = dict([(th.ident, th.name) for th in threading.enumerate()])
+	    code = []
+	    code.append("\n############ Threads stack ############") 
+	    for threadId, stack in sys._current_frames().items():
+	        code.append("# Thread: %s(%d)" % (id2name.get(threadId,""), threadId))
+	        for filename, lineno, name, line in traceback.extract_stack(stack):
+	            code.append('%sFile: "%s", line %d, in %s' % (' ' * 2, filename, lineno, name))
+	            if line:
+	                code.append("  %s" % (line.strip()))
+	    logger.info("\n".join(code))
+
+	signal.signal(signal.SIGQUIT, dumpstacks)
+
+
 	import apsw
 	import sys
 	import signal
