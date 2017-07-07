@@ -164,7 +164,7 @@ if __name__ == "__main__":
     # start web server
     successful = False
     try:
-        host, port = "localhost", 8080
+        host, port = "0.0.0.0", 8080
         prepareWebserver(host=host, port=port)
         t = threading.Thread(target=partial(bottle.run, host=host, port=port, quiet=True, debug=True))
         t.daemon = True
@@ -181,5 +181,5 @@ if __name__ == "__main__":
         # redirect stdout/stderror to logger to avoid ruining screen
         sys.stdout = LoggerWriter(logger.info)
         sys.stderr = LoggerWriter(logger.error)
-        startBrowser(host, port)
+        startBrowser("localhost", port)
         logger.info("web browser exited.")
