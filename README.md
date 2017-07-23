@@ -98,7 +98,7 @@ Just clone or download this project to one of your Vertica nodes, and run follow
       <code><pre>
       MacBookProOfDQ:vDBAHelper liudq$ bin/mon.sh 
       ----system---- ------node------ --total-cpu-usage-- -dsk/total- -net/total- ---paging-- ---system--
-           time     |      name      |usr sys idl wai stl| read  writ| recv  send|  in   out | int   csw 
+      .    time     |      name      |usr sys idl wai stl| read  writ| recv  send|  in   out | int   csw 
       23-07 21:10:42|v_vmart_node0001| 33  17  50   0   0|   0     0 | 326B  352B|   0     0 |  62    54 
       23-07 21:10:42|v_vmart_node0002| 33   0  67   0   0|   0     0 | 326B  360B|   0     0 |  45    44 
       23-07 21:10:42|v_vmart_node0003|  0   0   0   0   0|   0     0 | 334B  360B|   0     0 |  20    21
