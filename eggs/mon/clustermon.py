@@ -16,6 +16,12 @@ import db.vcluster as vcluster
 import db.dbmanager as dbmanager
 import util.reflection as reflection
 
+old_stdout = sys.stdout
+sys.stdout = mystdout = StringIO() 
+import mon.dstat as dstatmodule
+import mon.clusterdstat as clusterdstatmodule
+sys.stdout = old_stdout
+srcclusterdstatmodule = reflection.overridemodule(dstatmodule, clusterdstatmodule)
 
 logger = logging.getLogger("clustermon")
 
@@ -51,14 +57,71 @@ def remotecall(src, args, nodeNamesPattern) :
     return [ret[k] for k in [key for key in sorted(ret) if nodeNamesPattern.match(key) ]]
 
 
-if __name__ == "__main__":
-    old_stdout = sys.stdout
-    sys.stdout = mystdout = StringIO() 
-    import mon.dstat as dstatmodule
-    import mon.clusterdstat as clusterdstatmodule
-    sys.stdout = old_stdout
-    srcclusterdstatmodule = reflection.overridemodule(dstatmodule, clusterdstatmodule)
+def initmonitor(args, nodeNamesPattern) :
+    """ remotely execute script on Vertica cluster.
 
+      Arguments:
+        - args: list of arguments for dstat
+        - nodeNamesPattern: regular expression pattern for select Vertica nodes.
+
+      Returns: ansi headers lines  
+    """
+
+    headers = ""
+    src = srcclusterdstatmodule + """
+if __name__ == '__channelexec__' or __name__ == '__main__' :
+    nodeName = channel.gateway.id.split('-')[0] # remove the tailing '-slave'
+
+    remoteargs = channel.receive()
+    args = remoteargs["args"]
+    dstatmodule.initterm()
+    dstatmodule.op = dstatmodule.Options(args)
+    dstatmodule.theme = dstatmodule.set_theme()
+    dstatmodule.main()
+
+    old_stdout = sys.stdout
+    from cStringIO import StringIO
+    sys.stdout = mystdout = StringIO() 
+    dstatmodule.perform(0)
+    sys.stdout = old_stdout
+    channel.send(header(totlist, totlist))
+    """
+    for line in remotecall(src, {"args": args}, nodeNamesPattern) :
+        #only get headers from 1st node
+        headers = line
+        break
+    
+    return headers
+
+
+def monitoring(update, nodeNamesPattern) :
+    """ remotely execute script on Vertica cluster.
+
+      Arguments:
+        - update: sequence number
+        - nodeNamesPattern: regular expression pattern for select Vertica nodes.
+
+      Returns: ansi monitoring lines
+    """
+
+    src = """
+if __name__ == '__channelexec__' or __name__ == '__main__' :
+    nodeName = channel.gateway.id.split('-')[0] # remove the tailing '-slave'
+
+    remoteargs = channel.receive()
+    update = remoteargs["update"]
+
+    old_stdout = sys.stdout
+    from cStringIO import StringIO
+    sys.stdout = mystdout = StringIO() 
+    dstatmodule.perform(update)
+    sys.stdout = old_stdout
+    channel.send(mystdout.getvalue())
+    """
+    return remotecall(src, {"update": update}, nodeNamesPattern) 
+
+
+if __name__ == "__main__":
     class MyOptionParser(OptionParser):
         def error(self, msg):
             pass
@@ -93,50 +156,15 @@ if __name__ == "__main__":
     nodeNamesPattern = re.compile(options.nodeNamesExpress)
 
     # init, get headers
-    headers = ""
-    src = srcclusterdstatmodule + """
-if __name__ == '__channelexec__' or __name__ == '__main__' :
-    nodeName = channel.gateway.id.split('-')[0] # remove the tailing '-slave'
+    headers = initmonitor(args, nodeNamesPattern)
 
-    remoteargs = channel.receive()
-    args = remoteargs["args"]
-    dstatmodule.initterm()
-    dstatmodule.op = dstatmodule.Options(args)
-    dstatmodule.theme = dstatmodule.set_theme()
-    dstatmodule.main()
-
-    old_stdout = sys.stdout
-    from cStringIO import StringIO
-    sys.stdout = mystdout = StringIO() 
-    dstatmodule.perform(0)
-    sys.stdout = old_stdout
-    channel.send(header(totlist, totlist))
-    """
-    for line in remotecall(src, {"args": args}, nodeNamesPattern) :
-        #only get headers from 1st node
-        headers = line
-        break
 
     # get counters
-    src = """
-if __name__ == '__channelexec__' or __name__ == '__main__' :
-    nodeName = channel.gateway.id.split('-')[0] # remove the tailing '-slave'
-
-    remoteargs = channel.receive()
-    update = remoteargs["update"]
-
-    old_stdout = sys.stdout
-    from cStringIO import StringIO
-    sys.stdout = mystdout = StringIO() 
-    dstatmodule.perform(update)
-    sys.stdout = old_stdout
-    channel.send(mystdout.getvalue())
-    """
     try:
         update = 1000 # Seems there will be weird issue if update increase from 1 
         while True:
             print headers,
-            for line in remotecall(src, {"update": update}, nodeNamesPattern) :
+            for line in monitoring(update, nodeNamesPattern) :
                 print line,
             time.sleep(1)
             update += 1

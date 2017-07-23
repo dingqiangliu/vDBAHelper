@@ -1,0 +1,27 @@
+% MAXMSGLENGTH = 20
+<html>
+<head>
+    <title>Monitoring Control</title>
+    <meta http-equiv="cache-control" content="no-cache" />
+    <meta charset="utf-8" />
+    <script type="text/javascript" src="/static/date.js"></script>
+</head>
+<body>
+    <form name="predicates" method="POST" action="./monlist">
+    <table border="0">
+        <caption><b>Control parameters:</b></caption>
+        <tr>
+            <td><b>Nodes name pattern(regular expression) (<u>n</u>):</b></td>
+            <td colspan="4"><input name="nodenamepattern" type="text" maxlength="19" size="19" value="{{nodenamepattern}}" accesskey="n" /></td>
+        </tr>
+        </tr>
+    </table>
+    </form>
+    <table border="0">
+        <tr>
+            <td><a target="mondetail" href="./mondetail?start=1&nodenamepattern={{nodenamepattern}};" accesskey="s">Start(<u>s</u>)</a></td>
+            <td><a target="mondetail" href="./mondetail?start=0&nodenamepattern={{nodenamepattern}};" accesskey="e">Stop(<u>e</u>)</a></td>
+        </tr>
+    </table>
+</body>
+</html>
