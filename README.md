@@ -6,7 +6,7 @@ When managing or trouble shooting on Vertica cluster, sometimes you may meet fol
 
 We need tools to make life of Vertica DBA easier, then vDBAHelper come. 
 
-vDBAHelper is a toolkit for Vertica DBA, built on dynamic language **[Python](https://www.python.org/)**  and other open source projects, such as SQLite wrap **[APSW](https://rogerbinns.github.io/apsw/)** for query engine, lightweight distributed process framework **[execnet](http://codespeak.net/execnet/)** for distrubted process, lightweight micro web-framework **[Bottle](https://bottlepy.org/docs/dev/)** for user interface, and text mode web browser **[ELinks](http://elinks.or.cz/)** as client.
+vDBAHelper is a toolkit for Vertica DBA, built on dynamic language **[Python](https://www.python.org/)**  and other open source projects, such as SQLite wrap **[APSW](https://rogerbinns.github.io/apsw/)** for query engine, lightweight distributed process framework **[execnet](http://codespeak.net/execnet/)** for distrubted process, lightweight micro web-framework **[Bottle](https://bottlepy.org/docs/dev/)** for user interface, text mode web browser **[ELinks](http://elinks.or.cz/)** as client, and  **[DSTAT](https://github.com/dagwieers/dstat/)** as monitoring framework.
 
 vDBAHelper consolidates Vertica log files on all nodes with timeline or session/transaction, including datacollectors, vertica.log, dbLog, message.log etc, provides SQL and TUI interface to show recent issues, guide DBA navigating performance or function issues info, and related suggestions.  
 
@@ -53,6 +53,9 @@ User interfaces through Elinks/Bottle:
      - recommendaton actions for issue.
  2. TODO: Recommendations: analysis workload, resource usage etc., give tuning recommendations.
 
+Others:
+----------
+ 1. Cluster monitoring tool **bin/mon.sh** 
 
 Requirements
 =============
@@ -90,6 +93,32 @@ Just clone or download this project to one of your Vertica nodes, and run follow
       
       MacBookProOfDQ:vDBAHelper liudq$ bin/vDBAHelper.sh </pre></code>
       ![tui](./imgs/tui.png)
+
+ - **bin/mon.sh** : monitoring select nodes in cluster
+      <code><pre>
+      MacBookProOfDQ:vDBAHelper liudq$ bin/mon.sh 
+      ----system---- ------node------ --total-cpu-usage-- -dsk/total- -net/total- ---paging-- ---system--
+           time     |      name      |usr sys idl wai stl| read  writ| recv  send|  in   out | int   csw 
+      23-07 21:10:42|v_vmart_node0001| 33  17  50   0   0|   0     0 | 326B  352B|   0     0 |  62    54 
+      23-07 21:10:42|v_vmart_node0002| 33   0  67   0   0|   0     0 | 326B  360B|   0     0 |  45    44 
+      23-07 21:10:42|v_vmart_node0003|  0   0   0   0   0|   0     0 | 334B  360B|   0     0 |  20    21
+      ...
+      ...
+      MacBookProOfDQ:vDBAHelper liudq$ bin/mon.sh --help
+      Usage: bin/mon.sh [OPTIONS] 
+      Vertica OPTIONS:
+         --database VerticaDBName   Vertica database name, default is the first database in meta file(/opt/vertica/config/admintools.conf)
+         --file verticaMetaFile     Vertica database meta file, default is (/opt/vertica/config/admintools.conf)
+         --user verticaAdminOSUser  Vertica Administrator OS username, default is dbadmin
+         --nodes verticaNodeNamePattern Regular expression for select Vertica nodes,  default is .\* for all nodes
+         -h | --help                show usage
+      Notes: you should confirm ssh password-less accessible those nodes IPs in Vertica database meta file with verticaAdminOSUser
+      \------------------------
+      Usage: dstat [-afv] [options..] [delay [count]]
+      Versatile tool for generating system resource statistics
+      
+      Dstat options:
+      ... </pre></code>
 
  - **bin/sqlite.sh** : SQLite query shell
       <code><pre>
