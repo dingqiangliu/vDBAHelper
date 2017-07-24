@@ -149,6 +149,7 @@ if __name__ == "__main__":
     args = args + ["1", "0"] 
 
     if [ a for a in sys.argv[1:] if a in helpArgs] :  
+        dstatmodule.initterm()
         dstatmodule.Options(args)
         exit(0)
 
