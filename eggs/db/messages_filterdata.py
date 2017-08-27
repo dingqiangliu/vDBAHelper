@@ -8,6 +8,7 @@
 import re
 from datetime import datetime
 import os, sys
+import glob
 
 
 COLUMNS = ["time", "host_name", "component", "message"]
@@ -366,7 +367,8 @@ if __name__ == '__channelexec__' or __name__ == '__main__' :
 
     if not 1 in predicates or all([eval("nodeName %s val" % operators[op]) for op, val in predicates[1]]) :
         path = '/var/log/messages'
-        data = [ parseFile(path, args) ]
+        # parse all rotated log files
+        data = [ parseFile(f, args) for f in glob.glob(path + "*") ]
         data = [x for x in data if x is not None] # ignore empty file
   
         if not channel.isclosed() and len(data) > 0 :

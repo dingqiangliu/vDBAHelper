@@ -47,9 +47,18 @@ insert into issue_reason values('node_down_node_left_cluster', 'node left cluste
 insert into log_message_level values('FATAL', 'vertica_log', ' thread_name=''Spread Client'' and message like ''Cluster partitioned%'' ');
 insert into issue_category values('cluster_partitioned', 'cluster partitioned', 0, 'vertica_log', 'Cluster partitioned');
 insert into issue_reason values('cluster_partitioned', 'cluster partitioned', 'cluster partitioned', 0, 'vertica_log', 'time', 'message:cluster partitioned', 'check switch status and vlan settings, avoid connecting vertica nodes with different switchs if possible');
-insert into issue_reason values('cluster_partitioned_node_left_ksafety', 'node left cluster for ksafety', 'cluster partitioned', 1, 'vertica_log', 'time', 'message:Node left cluster reassessing k safety', Null);
-insert into issue_reason values('cluster_partitioned_node_left_unsafe', 'node unsafe', 'cluster partitioned', 2, 'vertica_log', 'time', 'message:Setting node UNSAFE', Null);
-insert into issue_reason values('cluster_partitioned_node_left', 'node left cluster', 'cluster partitioned', 3, 'vertica_log', 'time', 'message:nodeSetNotifier left the cluster', Null);
+insert into issue_reason values('cluster_partitioned_node_left_ksafety', 'node left cluster for ksafety', 'cluster partitioned', 1, 'vertica_log', 'time', 'message:Node left cluster reassessing k safety', 'partitioned cluster cause unsafe nodes down.');
+insert into issue_reason values('cluster_partitioned_node_left_unsafe', 'node unsafe', 'cluster partitioned', 2, 'vertica_log', 'time', 'message:Setting node UNSAFE', 'partitioned cluster cause some nodes unsafe.');
+insert into issue_reason values('cluster_partitioned_node_left', 'node left cluster', 'cluster partitioned', 3, 'vertica_log', 'time', 'message:nodeSetNotifier left the cluster', 'partitioned cluster cause unsafe nodes down.');
+
+-- rule: NIC link down 
+insert into log_message_level values('FATAL', 'messages', ' component=''kernel'' and message like ''%NIC Link is Down%'' ');
+insert into issue_category values('nic_link_down', 'NIC Link Down', 1, 'messages', 'NIC Link is Down');
+insert into issue_reason values('nic_link_down_down', 'NIC link Down', 'NIC Link Down', 0, 'messages', 'time', 'message:NIC Link is Down', 'please check switch ports logs, cables.');
+insert into issue_reason values('nic_link_down_cluster_partitioned', 'cluster partitioned', 'NIC Link Down', 1, 'vertica_log', 'time', 'message:cluster partitioned', 'NIC link down cause cluster partitioned.');
+insert into issue_reason values('nic_link_down_cluster_partitioned_node_left_ksafety', 'node left cluster for ksafety', 'NIC Link Down', 2, 'vertica_log', 'time', 'message:Node left cluster reassessing k safety', 'partitioned cluster cause some nodes unsafe.');
+insert into issue_reason values('nic_link_down_cluster_partitioned_node_left_unsafe', 'node unsafe', 'NIC Link Down', 3, 'vertica_log', 'time', 'message:Setting node UNSAFE', 'partitioned cluster cause some nodes unsafe.');
+insert into issue_reason values('nic_link_down_cluster_partitioned_node_left', 'node left cluster', 'NIC Link Down', 4, 'vertica_log', 'time', 'message:nodeSetNotifier left the cluster', 'partitioned cluster cause unsafe nodes down.');
 
 -- rule: vertica process invoked out of memory killer
 insert into log_message_level values('FATAL', 'messages', ' component=''kernel'' and message like ''%vertica invoked oom-killer%'' ');

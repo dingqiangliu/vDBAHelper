@@ -148,7 +148,7 @@ def errordetail(db):
         dtend = request.params['dtend']
         issue = request.params['issue']
 
-        TIME_SPAN_SECONDS = 5
+        TIME_SPAN_SECONDS = 35
         if '.' in time :
             dt = datetime.strptime(time, "%Y-%m-%d %H:%M:%S.%f")
         elif ':' in time :
