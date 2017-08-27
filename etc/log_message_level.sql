@@ -69,6 +69,11 @@ insert into issue_reason values('killed_by_oom_killed', 'vertica process was kil
 -- rule: Low disk space detected
 insert into log_message_level values('WARNING', 'vertica_log', ' thread_name=''LowDiskSpaceCheck'' and message like ''%Low disk space detected%'' ');
 insert into issue_category values('lowdiskspacedetected', 'Low disk space', 0, 'vertica_log', 'Low disk space detected');
-insert into issue_reason values('lowdiskspacedetected', 'Low disk space detected', 'Low disk space', 0, 'vertica_log', 'time', 'message:Low disk space detected', 'check disk usage, remove unsed data, or add more disks.');
+insert into issue_reason values('lowdiskspacedetected', 'Low disk space detected', 'Low disk space', 0, 'vertica_log', 'time', 'message:Low disk space detected', 'please check disk usage, remove unsed data, or add more disks.');
+
+-- rule: Could not create directory
+insert into log_message_level values('ERROR', 'vertica_log', ' elevel=''ERROR'' and message like ''%Could not create directory%Permission denied%'' ');
+insert into issue_category values('no_data_write_permission', 'No write permission', 0, 'vertica_log', 'Could not create directory Permission denied');
+insert into issue_reason values('no_data_write_permission', 'Create directory or file failed', 'No write permission', 0, 'vertica_log', 'transaction_id', 'message:Could not create directory Permission denied', '1. check access right of database directory. 2. check status of RAID card and its battery.');
 
 -- commit;
